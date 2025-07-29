@@ -2,7 +2,7 @@ import os
 import sys
 import json
 import tkinter as tk
-from tkinter import messagebox, filedialog
+from tkinter import messagebox, filedialog, ttk
 from win32com.client import Dispatch
 import winshell
 from google_play_scraper import search
@@ -10,7 +10,10 @@ import requests
 from PIL import Image
 from io import BytesIO
 
-SETTINGS_FILE = os.path.join(os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else __file__), "settings.json")
+SETTINGS_FILE = os.path.join(
+    os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else __file__),
+    "settings.json"
+)
 
 def load_settings():
     if os.path.exists(SETTINGS_FILE):
@@ -54,12 +57,29 @@ def download_icon(url, name):
 class PlayStoreShortcutApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Live Play Store Game Search")
-        self.geometry("500x500")
+        self.title("🎮 Play Store Game Shortcut Maker")
+        self.geometry("600x620")
         self.resizable(False, False)
+        self.configure(bg="#1e1e1e")
 
         self.settings = load_settings()
 
+        # Styling
+        self.style = ttk.Style(self)
+        self.style.theme_use("clam")
+        self.style.configure("TLabel", background="#1e1e1e", foreground="#ffffff", font=("Segoe UI", 10))
+        self.style.configure("TButton", background="#292929", foreground="#ffffff", font=("Segoe UI", 10), padding=6)
+        self.style.map("TButton", background=[("active", "#444444")])
+        self.style.configure("TRadiobutton", background="#1e1e1e", foreground="#ffffff", font=("Segoe UI", 10))
+        self.style.configure("TEntry", fieldbackground="#2d2d2d", foreground="#ffffff")
+
+        # Fix radiobutton hover text
+        self.style.map("Custom.TRadiobutton",
+            background=[("active", "#ffffff"), ("!active", "#1e1e1e")],
+            foreground=[("active", "#000000"), ("!active", "#ffffff")]
+        )
+
+        # Prompt for LDPlayer if not set
         if "ldplayer_path" not in self.settings or not os.path.exists(self.settings["ldplayer_path"]):
             use_ld = messagebox.askyesno("LDPlayer Detection", "LDPlayer not detected.\nDo you have LDPlayer 9 installed?")
             if use_ld:
@@ -68,28 +88,47 @@ class PlayStoreShortcutApp(tk.Tk):
             else:
                 self.settings["ldplayer_path"] = None
 
-        tk.Label(self, text="🔍 Search Google Play:").pack(pady=(10, 0))
+        # Search bar
+        search_frame = tk.Frame(self, bg="#1e1e1e")
+        search_frame.pack(pady=15)
+        ttk.Label(search_frame, text="🔍 Search Google Play:").pack(anchor="w")
+        entry_frame = tk.Frame(search_frame, bg="#1e1e1e")
+        entry_frame.pack(pady=5)
         self.search_var = tk.StringVar()
-        self.search_entry = tk.Entry(self, textvariable=self.search_var, width=50)
-        self.search_entry.pack(pady=(0, 5))
+        self.search_entry = ttk.Entry(entry_frame, textvariable=self.search_var, width=45)
+        self.search_entry.pack(side=tk.LEFT, padx=(0, 5))
+        search_btn = ttk.Button(entry_frame, text="Search", command=self.perform_search)
+        search_btn.pack(side=tk.LEFT)
         self.search_entry.bind("<Return>", self.perform_search)
 
-        self.listbox = tk.Listbox(self, height=10, width=70)
-        self.listbox.pack()
+        # Listbox for search results
+        self.listbox = tk.Listbox(self, height=10, width=75, bg="#2d2d2d", fg="white", font=("Segoe UI", 10), selectbackground="#444444")
+        self.listbox.pack(pady=(10, 15))
         self.listbox.bind("<<ListboxSelect>>", self.on_select)
 
-        tk.Label(self, text="📦 Selected Package Name:").pack(pady=(10, 2))
-        self.pkg_entry = tk.Entry(self, width=50)
-        self.pkg_entry.pack()
+        # Empty list message
+        self.empty_label = ttk.Label(self, text="Please search the game", foreground="#888888", font=("Segoe UI", 10))
+        self.empty_label.place(in_=self.listbox, relx=0.5, rely=0.5, anchor="center")
 
-        tk.Label(self, text="🖥️ Platform:").pack(pady=(10, 2))
+        # Package name field
+        pkg_frame = tk.Frame(self, bg="#1e1e1e")
+        pkg_frame.pack(pady=(0, 10))
+        ttk.Label(pkg_frame, text="📦 Selected Package Name:").pack(anchor="w")
+        self.pkg_entry = ttk.Entry(pkg_frame, width=55)
+        self.pkg_entry.pack(pady=(3, 0))
+
+        # Platform radio buttons
+        platform_frame = tk.Frame(self, bg="#1e1e1e")
+        platform_frame.pack(pady=(5, 15))
+        ttk.Label(platform_frame, text="🖥️ Platform:").pack(anchor="w")
         self.platform_var = tk.StringVar(value="gp")
-        radio_frame = tk.Frame(self)
-        tk.Radiobutton(radio_frame, text="Google Play Games Beta", variable=self.platform_var, value="gp").pack(side=tk.LEFT, padx=10)
-        tk.Radiobutton(radio_frame, text="LDPlayer 9", variable=self.platform_var, value="ld").pack(side=tk.LEFT, padx=10)
-        radio_frame.pack()
+        radio_row = tk.Frame(platform_frame, bg="#1e1e1e")
+        radio_row.pack()
+        ttk.Radiobutton(radio_row, text="Google Play Games Beta", variable=self.platform_var, value="gp", style="Custom.TRadiobutton").pack(side=tk.LEFT, padx=15)
+        ttk.Radiobutton(radio_row, text="LDPlayer 9", variable=self.platform_var, value="ld", style="Custom.TRadiobutton").pack(side=tk.LEFT, padx=15)
 
-        tk.Button(self, text="🎯 Create Shortcut", command=self.create).pack(pady=15)
+        # Create button
+        ttk.Button(self, text="🎯 Create Shortcut", command=self.create).pack(pady=10)
 
         self.search_results = []
 
@@ -108,15 +147,21 @@ class PlayStoreShortcutApp(tk.Tk):
 
     def perform_search(self, event=None):
         query = self.search_var.get().strip()
-        if not query:
-            return
-
         self.listbox.delete(0, tk.END)
         self.search_results.clear()
+        self.empty_label.place_forget()
+
+        if not query:
+            self.empty_label.place(in_=self.listbox, relx=0.5, rely=0.5, anchor="center")
+            return
 
         try:
             results = search(query)
             results = results[:10]
+            if not results:
+                self.empty_label.place(in_=self.listbox, relx=0.5, rely=0.5, anchor="center")
+                return
+
             for app in results:
                 name = app['title']
                 pkg = app['appId']
@@ -124,6 +169,7 @@ class PlayStoreShortcutApp(tk.Tk):
                 self.listbox.insert(tk.END, f"{name} ({pkg})")
         except Exception as e:
             messagebox.showerror("Search Error", f"Failed to fetch results:\n{e}")
+            self.empty_label.place(in_=self.listbox, relx=0.5, rely=0.5, anchor="center")
 
     def on_select(self, event):
         index = self.listbox.curselection()
@@ -141,15 +187,11 @@ class PlayStoreShortcutApp(tk.Tk):
         name, pkg = self.search_results[index[0]]
 
         if self.platform_var.get() == "gp":
-            shortcut_name = name
             target = "C:\\Windows\\System32\\cmd.exe"
             arguments = f'/c start "" "googleplaygames://launch/?id={pkg}"'
         else:
-            shortcut_name = name
-            settings = load_settings()
-            target = settings.get("ldplayer_path", "")
+            target = self.settings.get("ldplayer_path", "")
             arguments = f'launchex --index 0 --packagename {pkg}'
-
             if not os.path.exists(target):
                 messagebox.showerror("Error", "LDPlayer 9 not found at expected path.")
                 return
@@ -163,11 +205,10 @@ class PlayStoreShortcutApp(tk.Tk):
         icon_path = download_icon(icon_url, pkg.split('.')[-1]) if icon_url else None
 
         try:
-            path = create_shortcut(shortcut_name, target, arguments, icon_path)
-            messagebox.showinfo("Success", f"Shortcut created:\n{shortcut_name}.lnk")
+            path = create_shortcut(name, target, arguments, icon_path)
+            messagebox.showinfo("Success", f"Shortcut created:\n{name}.lnk")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to create shortcut:\n{e}")
-
 
 if __name__ == "__main__":
     PlayStoreShortcutApp().mainloop()
