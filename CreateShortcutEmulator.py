@@ -57,29 +57,36 @@ def download_icon(url, name):
 class PlayStoreShortcutApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("🎮 Play Store Game Shortcut Maker")
-        self.geometry("600x620")
+        self.title("🎮 Create Shortcut on PC Emulator")
+        window_width = 600
+        window_height = 500
+        x = (self.winfo_screenwidth() - window_width) // 2
+        y = ((self.winfo_screenheight() - window_height) // 2) - 50
+        self.geometry(f"{window_width}x{window_height}+{x}+{y}")
         self.resizable(False, False)
         self.configure(bg="#1e1e1e")
 
         self.settings = load_settings()
 
-        # Styling
         self.style = ttk.Style(self)
         self.style.theme_use("clam")
         self.style.configure("TLabel", background="#1e1e1e", foreground="#ffffff", font=("Segoe UI", 10))
-        self.style.configure("TButton", background="#292929", foreground="#ffffff", font=("Segoe UI", 10), padding=6)
+        self.style.configure("TButton", background="#292929", foreground="#ffffff", font=("Segoe UI", 10), padding=6, relief="flat")
         self.style.map("TButton", background=[("active", "#444444")])
-        self.style.configure("TRadiobutton", background="#1e1e1e", foreground="#ffffff", font=("Segoe UI", 10))
         self.style.configure("TEntry", fieldbackground="#2d2d2d", foreground="#ffffff")
 
-        # Fix radiobutton hover text
-        self.style.map("Custom.TRadiobutton",
-            background=[("active", "#ffffff"), ("!active", "#1e1e1e")],
-            foreground=[("active", "#000000"), ("!active", "#ffffff")]
+        self.style.configure("Custom.TCombobox",
+            fieldbackground="#1e1e1e",
+            background="#1e1e1e",
+            foreground="#ffffff",
+            arrowcolor="#00d5ff"
+        )
+        self.style.map("Custom.TCombobox",
+            fieldbackground=[("readonly", "#1e1e1e")],
+            selectbackground=[("readonly", "#1e1e1e")],
+            foreground=[("readonly", "#ffffff")]
         )
 
-        # Prompt for LDPlayer if not set
         if "ldplayer_path" not in self.settings or not os.path.exists(self.settings["ldplayer_path"]):
             use_ld = messagebox.askyesno("LDPlayer Detection", "LDPlayer not detected.\nDo you have LDPlayer 9 installed?")
             if use_ld:
@@ -88,47 +95,46 @@ class PlayStoreShortcutApp(tk.Tk):
             else:
                 self.settings["ldplayer_path"] = None
 
-        # Search bar
         search_frame = tk.Frame(self, bg="#1e1e1e")
-        search_frame.pack(pady=15)
+        search_frame.pack(pady=15, fill=tk.X, padx=40)
         ttk.Label(search_frame, text="🔍 Search Google Play:").pack(anchor="w")
         entry_frame = tk.Frame(search_frame, bg="#1e1e1e")
-        entry_frame.pack(pady=5)
+        entry_frame.pack(pady=5, fill=tk.X)
         self.search_var = tk.StringVar()
-        self.search_entry = ttk.Entry(entry_frame, textvariable=self.search_var, width=45)
-        self.search_entry.pack(side=tk.LEFT, padx=(0, 5))
+        self.search_entry = ttk.Entry(entry_frame, textvariable=self.search_var)
+        self.search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         search_btn = ttk.Button(entry_frame, text="Search", command=self.perform_search)
-        search_btn.pack(side=tk.LEFT)
+        search_btn.pack(side=tk.LEFT, padx=(10, 0), ipady=1)
         self.search_entry.bind("<Return>", self.perform_search)
 
-        # Listbox for search results
-        self.listbox = tk.Listbox(self, height=10, width=75, bg="#2d2d2d", fg="white", font=("Segoe UI", 10), selectbackground="#444444")
-        self.listbox.pack(pady=(10, 15))
+        self.listbox = tk.Listbox(self, height=10, width=75, bg="#2d2d2d", fg="white",
+                                  font=("Segoe UI", 10), selectbackground="#444444",
+                                  relief="flat", highlightthickness=0)
+        self.listbox.pack(pady=(10, 15), padx=40)
         self.listbox.bind("<<ListboxSelect>>", self.on_select)
 
-        # Empty list message
         self.empty_label = ttk.Label(self, text="Please search the game", foreground="#888888", font=("Segoe UI", 10))
         self.empty_label.place(in_=self.listbox, relx=0.5, rely=0.5, anchor="center")
 
-        # Package name field
         pkg_frame = tk.Frame(self, bg="#1e1e1e")
-        pkg_frame.pack(pady=(0, 10))
-        ttk.Label(pkg_frame, text="📦 Selected Package Name:").pack(anchor="w")
-        self.pkg_entry = ttk.Entry(pkg_frame, width=55)
-        self.pkg_entry.pack(pady=(3, 0))
+        pkg_frame.pack(pady=(0, 10), fill=tk.X, padx=40)
+        ttk.Label(pkg_frame, text="📦 Selected Package Name:").pack(side=tk.LEFT)
+        self.pkg_label_var = tk.StringVar(value="-")
+        self.pkg_label = ttk.Label(pkg_frame, textvariable=self.pkg_label_var, foreground="#cccccc")
+        self.pkg_label.pack(side=tk.LEFT, padx=(10, 0))
 
-        # Platform radio buttons
         platform_frame = tk.Frame(self, bg="#1e1e1e")
-        platform_frame.pack(pady=(5, 15))
-        ttk.Label(platform_frame, text="🖥️ Platform:").pack(anchor="w")
-        self.platform_var = tk.StringVar(value="gp")
-        radio_row = tk.Frame(platform_frame, bg="#1e1e1e")
-        radio_row.pack()
-        ttk.Radiobutton(radio_row, text="Google Play Games Beta", variable=self.platform_var, value="gp", style="Custom.TRadiobutton").pack(side=tk.LEFT, padx=15)
-        ttk.Radiobutton(radio_row, text="LDPlayer 9", variable=self.platform_var, value="ld", style="Custom.TRadiobutton").pack(side=tk.LEFT, padx=15)
+        platform_frame.pack(pady=(5, 15), fill=tk.X, padx=40)
+        ttk.Label(platform_frame, text="🖥️ Platform:").pack(side=tk.LEFT)
+        self.platform_var = tk.StringVar(value="Google Play Games Beta")
+        self.platform_dropdown = ttk.Combobox(platform_frame,
+                                              textvariable=self.platform_var,
+                                              state="readonly",
+                                              values=["Google Play Games Beta", "LDPlayer 9"],
+                                              style="Custom.TCombobox")
+        self.platform_dropdown.pack(side=tk.LEFT, padx=(10, 0), fill=tk.X, expand=True)
 
-        # Create button
-        ttk.Button(self, text="🎯 Create Shortcut", command=self.create).pack(pady=10)
+        ttk.Button(self, text="🎯 Create Shortcut", command=self.create).pack(pady=10, ipadx=10, ipady=4)
 
         self.search_results = []
 
@@ -150,6 +156,7 @@ class PlayStoreShortcutApp(tk.Tk):
         self.listbox.delete(0, tk.END)
         self.search_results.clear()
         self.empty_label.place_forget()
+        self.pkg_label_var.set("-")
 
         if not query:
             self.empty_label.place(in_=self.listbox, relx=0.5, rely=0.5, anchor="center")
@@ -166,7 +173,7 @@ class PlayStoreShortcutApp(tk.Tk):
                 name = app['title']
                 pkg = app['appId']
                 self.search_results.append((name, pkg))
-                self.listbox.insert(tk.END, f"{name} ({pkg})")
+                self.listbox.insert(tk.END, name)
         except Exception as e:
             messagebox.showerror("Search Error", f"Failed to fetch results:\n{e}")
             self.empty_label.place(in_=self.listbox, relx=0.5, rely=0.5, anchor="center")
@@ -175,8 +182,7 @@ class PlayStoreShortcutApp(tk.Tk):
         index = self.listbox.curselection()
         if index:
             _, pkg = self.search_results[index[0]]
-            self.pkg_entry.delete(0, tk.END)
-            self.pkg_entry.insert(0, pkg)
+            self.pkg_label_var.set(pkg)
 
     def create(self):
         index = self.listbox.curselection()
@@ -185,8 +191,9 @@ class PlayStoreShortcutApp(tk.Tk):
             return
 
         name, pkg = self.search_results[index[0]]
+        selected_platform = self.platform_var.get()
 
-        if self.platform_var.get() == "gp":
+        if selected_platform == "Google Play Games Beta":
             target = "C:\\Windows\\System32\\cmd.exe"
             arguments = f'/c start "" "googleplaygames://launch/?id={pkg}"'
         else:
