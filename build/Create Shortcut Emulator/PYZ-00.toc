@@ -1008,6 +1008,10 @@
    'C:\\Program '
    'Files\\WindowsApps\\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\\Lib\\hashlib.py',
    'PYMODULE'),
+  ('help',
+   'C:\\Users\\Jayrald John\\OneDrive\\Documents\\Code\\Python tkinter\\Create '
+   'Shortcut on PC Emulator\\help.py',
+   'PYMODULE'),
   ('hmac',
    'C:\\Program '
    'Files\\WindowsApps\\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\\Lib\\hmac.py',

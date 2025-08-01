@@ -14,13 +14,13 @@ Types if import:
 IMPORTANT: Do NOT post this list to the issue-tracker. Use it as a basis for
             tracking down the missing module yourself. Thanks!
 
-missing module named pwd - imported by posixpath (delayed, conditional, optional), shutil (delayed, optional), tarfile (optional), pathlib (delayed, optional), subprocess (delayed, conditional, optional), netrc (delayed, conditional), getpass (delayed), http.server (delayed, optional), psutil (optional)
+missing module named pwd - imported by shutil (delayed, optional), tarfile (optional), pathlib (delayed, optional), subprocess (delayed, conditional, optional), posixpath (delayed, conditional, optional), netrc (delayed, conditional), getpass (delayed), http.server (delayed, optional), psutil (optional)
 missing module named grp - imported by shutil (delayed, optional), tarfile (optional), pathlib (delayed, optional), subprocess (delayed, conditional, optional)
 missing module named _posixsubprocess - imported by subprocess (conditional), multiprocessing.util (delayed)
 missing module named fcntl - imported by subprocess (optional)
 missing module named _frozen_importlib_external - imported by importlib._bootstrap (delayed), importlib (optional), importlib.abc (optional), zipimport (top-level)
 excluded module named _frozen_importlib - imported by importlib (optional), importlib.abc (optional), zipimport (top-level)
-missing module named posix - imported by os (conditional, optional), posixpath (optional), shutil (conditional), importlib._bootstrap_external (conditional)
+missing module named posix - imported by shutil (conditional), importlib._bootstrap_external (conditional), os (conditional, optional), posixpath (optional)
 missing module named resource - imported by posix (top-level)
 missing module named _posixshmem - imported by multiprocessing.resource_tracker (conditional), multiprocessing.shared_memory (conditional)
 missing module named _scproxy - imported by urllib.request (conditional)
@@ -32,8 +32,6 @@ missing module named multiprocessing.TimeoutError - imported by multiprocessing 
 missing module named multiprocessing.set_start_method - imported by multiprocessing (top-level), multiprocessing.spawn (top-level)
 missing module named multiprocessing.get_start_method - imported by multiprocessing (top-level), multiprocessing.spawn (top-level)
 missing module named pyimod02_importers - imported by C:\Users\Jayrald John\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\PyInstaller\hooks\rthooks\pyi_rth_pkgutil.py (delayed)
-missing module named olefile - imported by PIL.FpxImagePlugin (top-level), PIL.MicImagePlugin (top-level)
-missing module named PIL._avif - imported by PIL (optional), PIL.AvifImagePlugin (optional)
 missing module named _dummy_thread - imported by numpy._core.arrayprint (optional)
 missing module named 'numpy_distutils.cpuinfo' - imported by numpy.f2py.diagnose (delayed, conditional, optional)
 missing module named 'numpy_distutils.fcompiler' - imported by numpy.f2py.diagnose (delayed, conditional, optional)
@@ -230,6 +228,8 @@ missing module named numpy._core.amax - imported by numpy._core (top-level), num
 missing module named numpy._core.all - imported by numpy._core (top-level), numpy.linalg._linalg (top-level), numpy.testing._private.utils (delayed), numpy (conditional)
 missing module named numpy._core.add - imported by numpy._core (top-level), numpy.linalg._linalg (top-level), numpy (conditional)
 missing module named numpy._distributor_init_local - imported by numpy (optional), numpy._distributor_init (optional)
+missing module named olefile - imported by PIL.FpxImagePlugin (top-level), PIL.MicImagePlugin (top-level)
+missing module named PIL._avif - imported by PIL (optional), PIL.AvifImagePlugin (optional)
 missing module named defusedxml - imported by PIL.Image (optional)
 missing module named simplejson - imported by requests.compat (conditional, optional)
 missing module named dummy_threading - imported by requests.cookies (optional)

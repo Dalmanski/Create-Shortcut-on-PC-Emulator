@@ -6,6 +6,7 @@ pyinstaller ^
   --noconsole ^
   --onefile ^
   --icon=icon.ico ^
+  --hidden-import=help ^
   "Create Shortcut Emulator.py"
 
 echo === Creating ZIP archive ===
