@@ -8,6 +8,7 @@ pyinstaller ^
   --icon=icon.ico ^
   --hidden-import=help ^
   --hidden-import=settings ^
+  --hidden-import=jaypy ^
   "Create Shortcut Emulator.py"
 
 echo === Creating ZIP archive ===

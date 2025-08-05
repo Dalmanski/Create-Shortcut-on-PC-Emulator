@@ -11,6 +11,7 @@ from PIL import Image, ImageTk
 from io import BytesIO
 from help import open_help_popup
 from settings import open_settings_popup
+from jaypy import centerwindow
 
 SETTINGS_FILE = os.path.join(
     os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else __file__),
@@ -29,8 +30,7 @@ def save_settings(data):
         json.dump(data, f, indent=4)
 
 def relaunch():
-    python = sys.executable
-    os.execl(python, python, *sys.argv)
+    os.execl(sys.executable, sys.executable, *sys.argv)
 
 def validate_settings(settings):
     gpg_needed = settings.get("GooglePlayGames_needed")
@@ -68,21 +68,10 @@ def download_icon(url, name):
     except Exception as e:
         print("Icon download error:", e)
         return None
-    
-def center_window(window):
-    window.update_idletasks()
-    width = window.winfo_width()
-    height = window.winfo_height()
-    screen_width = window.winfo_screenwidth()
-    screen_height = window.winfo_screenheight()
-    x = (screen_width - width) // 2
-    y = ((screen_height - height) // 2) - 30
-    window.geometry(f"+{x}+{y}")
 
 class PlayStoreShortcutApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        
         self.settings = load_settings()
         if not validate_settings(self.settings):
             self.withdraw()
@@ -92,35 +81,35 @@ class PlayStoreShortcutApp(tk.Tk):
             return
 
         self.iconbitmap("icon.ico")
-        self.title("Create Shortcut on PC Emulator") 
-        self.withdraw()
+        self.title("Create Shortcut on PC Emulator")
         self.geometry("600x500")
         self.configure(bg="#1e1e1e")
         self.resizable(False, False)
-        center_window(self)
-        self.deiconify()
+        centerwindow(self, offsety=-40)
 
-        self.search_results = []
-        self.image_refs = []
-        self.selected_item = None
+        self.search_results, self.image_refs, self.selected_item = [], [], None
+        self._setup_styles()
+        self._create_widgets()
 
-        self.style = ttk.Style(self)
-        self.style.theme_use("clam")
-        self.style.configure("TLabel", background="#1e1e1e", foreground="#ffffff")
-        self.style.configure("TButton", background="#292929", foreground="#ffffff", padding=6, relief="flat")
-        self.style.map("TButton", background=[("active", "#444444")])
-        self.style.configure("TEntry", fieldbackground="#2d2d2d", foreground="#ffffff")
-        self.style.configure("TCombobox", arrowcolor="#ffffff")
-        self.style.map("TCombobox", 
-            fieldbackground=[("readonly", "#2d2d2d")],
-            selectbackground=[("readonly", "#2d2d2d")],
-            background=[("readonly", "#1e1e1e")],
-            foreground=[("readonly", "white")]
-        )
+    def _setup_styles(self):
+        style = ttk.Style(self)
+        style.theme_use("clam")
+        style.configure("TLabel", background="#1e1e1e", foreground="#ffffff")
+        style.configure("TButton", background="#292929", foreground="#ffffff", padding=6, relief="flat")
+        style.map("TButton", background=[("active", "#444444")])
+        style.configure("TEntry", fieldbackground="#2d2d2d", foreground="#ffffff")
+        style.configure("TCombobox", arrowcolor="#ffffff")
+        style.map("TCombobox",
+                  fieldbackground=[("readonly", "#2d2d2d")],
+                  selectbackground=[("readonly", "#2d2d2d")],
+                  background=[("readonly", "#1e1e1e")],
+                  foreground=[("readonly", "white")])
 
+    def _create_widgets(self):
         search_frame = tk.Frame(self, bg="#1e1e1e")
         search_frame.pack(pady=15, fill=tk.X, padx=20)
         ttk.Label(search_frame, text="🔍 Search Google Play:").pack(anchor="w")
+
         self.search_var = tk.StringVar()
         entry = ttk.Entry(search_frame, textvariable=self.search_var)
         entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
@@ -130,33 +119,8 @@ class PlayStoreShortcutApp(tk.Tk):
         btn_frame = tk.Frame(self, bg="#1e1e1e")
         btn_frame.place(relx=1.0, rely=1.0, x=-10, y=-10, anchor="se")
 
-        settings_button = tk.Button(
-            btn_frame,
-            text="⚙️",
-            command=open_settings_popup,
-            bg="#2d2d2d",
-            fg="white",
-            activebackground="#3a3a3a",
-            activeforeground="white",
-            relief="flat",
-            font=("Segoe UI", 10),
-            cursor="hand2"
-        )
-        settings_button.pack(side=tk.RIGHT, padx=5)
-
-        help_button = tk.Button(
-            btn_frame,
-            text="❓",
-            command=open_help_popup,
-            bg="#2d2d2d",
-            fg="white",
-            activebackground="#3a3a3a",
-            activeforeground="white",
-            relief="flat",
-            font=("Segoe UI", 10),
-            cursor="hand2"
-        )
-        help_button.pack(side=tk.RIGHT)
+        self._create_tool_button(btn_frame, "⚙️", open_settings_popup).pack(side=tk.RIGHT, padx=5)
+        self._create_tool_button(btn_frame, "❓", open_help_popup).pack(side=tk.RIGHT)
 
         self.result_frame = tk.Frame(self, bg="#1e1e1e")
         self.result_frame.pack(padx=20, pady=10, fill=tk.BOTH, expand=True)
@@ -164,7 +128,6 @@ class PlayStoreShortcutApp(tk.Tk):
         self.canvas = tk.Canvas(self.result_frame, bg="#2d2d2d", height=240, highlightthickness=0)
         self.scrollbar = tk.Scrollbar(self.result_frame, orient="vertical", command=self.canvas.yview)
         self.scrollable_frame = tk.Frame(self.canvas, bg="#2d2d2d")
-
         self.scrollable_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
         self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
@@ -173,33 +136,35 @@ class PlayStoreShortcutApp(tk.Tk):
 
         self.empty_label = ttk.Label(self.canvas, text="Please search the game", foreground="#888888")
         self.empty_label.place(relx=0.5, rely=0.5, anchor="center")
-
         self.loading_label = ttk.Label(self.canvas, text="🔄 Loading...", foreground="#aaaaaa")
 
         self.pkg_label_var = tk.StringVar(value="-")
         pkg_frame = tk.Frame(self, bg="#1e1e1e")
         pkg_frame.pack(pady=10, padx=20, fill="x")
         ttk.Label(pkg_frame, text="📦 Selected Package:").pack(side=tk.LEFT)
-        pkg_value_label = ttk.Label(pkg_frame, textvariable=self.pkg_label_var, foreground="#cccccc", cursor="hand2")
-        pkg_value_label.pack(side=tk.LEFT, padx=10)
-        pkg_value_label.bind("<Button-1>", self.copy_selected_pkg_to_clipboard)
+        pkg_label = ttk.Label(pkg_frame, textvariable=self.pkg_label_var, foreground="#cccccc", cursor="hand2")
+        pkg_label.pack(side=tk.LEFT, padx=10)
+        pkg_label.bind("<Button-1>", self.copy_selected_pkg_to_clipboard)
 
         plat_frame = tk.Frame(self, bg="#1e1e1e")
         plat_frame.pack(pady=5, padx=20, fill="x")
         ttk.Label(plat_frame, text="🖥 Platform:").pack(side=tk.LEFT)
         self.platform_var = tk.StringVar(value="Google Play Games Beta")
-        self.platform_dropdown = ttk.Combobox(plat_frame, textvariable=self.platform_var,
-                                              values=["Google Play Games Beta", "LDPlayer 9"],
-                                              state="readonly")
-        self.platform_dropdown.pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
+        ttk.Combobox(plat_frame, textvariable=self.platform_var,
+                     values=["Google Play Games Beta", "LDPlayer 9"],
+                     state="readonly").pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
 
         ttk.Button(self, text="🎯 Create Shortcut", command=self.create).pack(pady=10)
+
+    def _create_tool_button(self, parent, text, command):
+        return tk.Button(parent, text=text, command=command, bg="#2d2d2d", fg="white",
+                         activebackground="#3a3a3a", activeforeground="white",
+                         relief="flat", font=("Segoe UI", 10), cursor="hand2")
 
     def perform_search(self, event=None):
         query = self.search_var.get().strip()
         self.clear_results()
         self.pkg_label_var.set("-")
-
         self.empty_label.place_forget()
         self.loading_label.place(relx=0.5, rely=0.6, anchor="center")
         self.update_idletasks()
@@ -210,12 +175,7 @@ class PlayStoreShortcutApp(tk.Tk):
             return
 
         try:
-            results = search(
-                query,
-                lang=self.settings.get("lang", "en"),
-                country=self.settings.get("country", "PH")
-            )[:10]
-
+            results = search(query, lang=self.settings.get("lang", "en"), country=self.settings.get("country", "PH"))[:10]
             self.loading_label.place_forget()
 
             if not results:
@@ -225,96 +185,81 @@ class PlayStoreShortcutApp(tk.Tk):
             self.scrollable_frame.grid_columnconfigure(0, weight=1)
             self.scrollable_frame.grid_columnconfigure(1, weight=1)
 
-            for index, app in enumerate(results):
-                name = app['title']
-                pkg = app['appId']
-                icon_url = app['icon']
-
-                try:
-                    image_data = requests.get(icon_url).content
-                    img = Image.open(BytesIO(image_data)).resize((48, 48), Image.Resampling.LANCZOS)
-                    photo = ImageTk.PhotoImage(img)
-                    self.image_refs.append(photo)
-                except Exception as e:
-                    print(f"Failed to load icon for {name}: {e}")
-                    photo = None
+            for idx, app in enumerate(results):
+                name, pkg, icon_url = app['title'], app['appId'], app['icon']
+                photo = self._fetch_photo(icon_url, name)
 
                 item = tk.Frame(self.scrollable_frame, bg="#2d2d2d", padx=6, pady=4)
-                row = index // 2
-                col = index % 2
-                item.grid(row=row, column=col, padx=6, pady=6, sticky="nsew")
-
+                item.grid(row=idx // 2, column=idx % 2, padx=6, pady=6, sticky="nsew")
                 item.bind("<Button-1>", lambda e, p=pkg, f=item: self.select_package(p, f))
 
-                if photo:
-                    icon_label = tk.Label(item, image=photo, bg="#2d2d2d")
-                    icon_label.image = photo
-                    icon_label.pack(side="left")
-                    icon_label.bind("<Button-1>", lambda e, p=pkg, f=item: self.select_package(p, f))
-                else:
-                    icon_label = tk.Label(item, text="🕹️", fg="white", bg="#2d2d2d", font=("Segoe UI", 18))
-                    icon_label.pack(side="left", padx=(0, 4))
-                    icon_label.bind("<Button-1>", lambda e, p=pkg, f=item: self.select_package(p, f))
-
-                name_label = tk.Label(
-                    item,
-                    text=name,
-                    fg="#ffffff",
-                    bg="#2d2d2d",
-                    anchor="w",
-                    font=("Segoe UI", 10),
-                    wraplength=160,
-                    justify="left"
-                )
-                name_label.pack(side="left", padx=10, fill="x", expand=True)
-                name_label.bind("<Button-1>", lambda e, p=pkg, f=item: self.select_package(p, f))
-
+                self._create_icon_label(item, photo, pkg, item)
+                self._create_name_label(item, name, pkg, item)
                 self.search_results.append((name, pkg))
 
         except Exception as e:
             self.loading_label.place_forget()
             messagebox.showerror("Error", str(e))
 
+    def _fetch_photo(self, url, name):
+        try:
+            data = requests.get(url).content
+            img = Image.open(BytesIO(data)).resize((48, 48), Image.Resampling.LANCZOS)
+            photo = ImageTk.PhotoImage(img)
+            self.image_refs.append(photo)
+            return photo
+        except Exception as e:
+            print(f"Failed to load icon for {name}: {e}")
+            return None
+
+    def _create_icon_label(self, parent, photo, pkg, frame):
+        if photo:
+            lbl = tk.Label(parent, image=photo, bg="#2d2d2d")
+            lbl.image = photo
+        else:
+            lbl = tk.Label(parent, text="🕹️", fg="white", bg="#2d2d2d", font=("Segoe UI", 18))
+        lbl.pack(side="left")
+        lbl.bind("<Button-1>", lambda e: self.select_package(pkg, frame))
+
+    def _create_name_label(self, parent, text, pkg, frame):
+        lbl = tk.Label(parent, text=text, fg="#ffffff", bg="#2d2d2d", anchor="w",
+                       font=("Segoe UI", 10), wraplength=160, justify="left")
+        lbl.pack(side="left", padx=10, fill="x", expand=True)
+        lbl.bind("<Button-1>", lambda e: self.select_package(pkg, frame))
+
     def clear_results(self):
-        for widget in self.scrollable_frame.winfo_children():
-            widget.destroy()
+        for w in self.scrollable_frame.winfo_children():
+            w.destroy()
         self.image_refs.clear()
         self.search_results.clear()
 
     def select_package(self, pkg, item_frame=None):
         self.pkg_label_var.set(pkg)
-        
-        if self.selected_item:
-            try:
-                if not self.selected_item.winfo_exists():
-                    self.selected_item = None
-                else:
-                    self.selected_item.configure(bg="#2d2d2d")
-                    for child in self.selected_item.winfo_children():
-                        child.configure(bg="#2d2d2d")
-            except tk.TclError:
-                self.selected_item = None
-
+        if self.selected_item and self.selected_item.winfo_exists():
+            self._set_bg_recursive(self.selected_item, "#2d2d2d")
         if item_frame:
-            item_frame.configure(bg="#3a3a3a")
-            for child in item_frame.winfo_children():
-                child.configure(bg="#3a3a3a")
+            self._set_bg_recursive(item_frame, "#3a3a3a")
             self.selected_item = item_frame
-    
+
+    def _set_bg_recursive(self, widget, color):
+        try:
+            widget.configure(bg=color)
+            for child in widget.winfo_children():
+                child.configure(bg=color)
+        except tk.TclError:
+            pass
+
     def copy_selected_pkg_to_clipboard(self, event=None):
         pkg = self.pkg_label_var.get()
         if pkg and pkg != "-":
             self.clipboard_clear()
             self.clipboard_append(pkg)
             self.update()
-
-            x = event.widget.winfo_rootx()
-            y = event.widget.winfo_rooty()
+            x, y = event.widget.winfo_rootx(), event.widget.winfo_rooty()
             tooltip = tk.Toplevel(self)
             tooltip.overrideredirect(True)
             tooltip.geometry(f"+{x + 100}+{y}")
-            label = tk.Label(tooltip, text="✅ Copied!", bg="black", fg="white", font=("Segoe UI", 9))
-            label.pack()
+            tk.Label(tooltip, text="✅ Copied!", bg="black", fg="white", font=("Segoe UI", 9)).pack()
             self.after(1000, tooltip.destroy)
 
     def create(self):
@@ -339,13 +284,12 @@ class PlayStoreShortcutApp(tk.Tk):
                 messagebox.showerror("LDPlayer", "LDPlayer path invalid.")
                 return
 
-        icon_url = ""
         try:
             icon_url = search(pkg)[0]['icon']
         except:
-            pass
-
+            icon_url = ""
         icon_path = download_icon(icon_url, pkg.split(".")[-1]) if icon_url else None
+
         try:
             create_shortcut(name, target, arguments, icon_path)
             messagebox.showinfo("Success", f"Shortcut created for: {name}")

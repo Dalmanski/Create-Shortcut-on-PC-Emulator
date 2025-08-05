@@ -1,10 +1,12 @@
 import tkinter as tk
+from jaypy import centerwindow
 
 def open_help_popup(parent=None):
     help_window = tk.Toplevel(parent)
     help_window.title("About")
     help_window.geometry("550x350")
     help_window.configure(bg="#121212")
+    centerwindow(help_window, offsety=-40)
 
     container = tk.Frame(help_window, bg="#1e1e1e", bd=2, relief="flat")
     container.place(relx=0.5, rely=0.5, anchor="center", width=500, height=320)
@@ -51,6 +53,8 @@ def open_help_popup(parent=None):
         "• The window now opens in the center\n"
         "• Icon added to the top-left corner of the window\n"
         "• You can now copy the package name by clicking on the label\n"
+        "• I added my custom py library \"jaypy\" to make the repetition code lesser. It's still WIP so it's not in online libraries yet\n"
+        "• Make code refactored\n"
         "\n"
         "Created by Jayrald John C. Dalman."
     )

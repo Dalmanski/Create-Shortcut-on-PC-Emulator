@@ -3,6 +3,7 @@ import sys
 import json
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
+from jaypy import centerwindow
 
 SETTINGS_FILE = os.path.join(
     os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else __file__),
@@ -63,16 +64,6 @@ def open_file_dialog_for_ldplayer(label_var):
             return
         label_var.set(file_path)
 
-def center_window(window):
-    window.update_idletasks()
-    width = window.winfo_width()
-    height = window.winfo_height()
-    screen_width = window.winfo_screenwidth()
-    screen_height = window.winfo_screenheight()
-    x = (screen_width - width) // 2
-    y = ((screen_height - height) // 2) - 30
-    window.geometry(f"+{x}+{y}")
-
 def open_settings_popup(parent=None):
     settings = load_settings()
 
@@ -80,7 +71,7 @@ def open_settings_popup(parent=None):
     win.title("Settings")
     win.geometry("600x320")
     win.configure(bg="#1e1e1e")
-    center_window(win)
+    centerwindow(win, offsety=-40)
 
     container = tk.Frame(win, bg="#1e1e1e", padx=30, pady=20)
     container.pack(expand=True)
