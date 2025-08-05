@@ -1,7 +1,19 @@
 import tkinter as tk
+import webbrowser
+import json
 from jaypy import centerwindow
 
+def get_version_from_settings():
+    try:
+        with open("settings.json", "r") as f:
+            data = json.load(f)
+            return data.get("version", "Unknown")
+    except Exception:
+        return "Unknown"
+
 def open_help_popup(parent=None):
+    version = get_version_from_settings()
+
     help_window = tk.Toplevel(parent)
     help_window.title("About")
     help_window.geometry("550x350")
@@ -32,9 +44,19 @@ def open_help_popup(parent=None):
         font=("Segoe UI", 16, "bold"),
         bg="#1e1e1e",
         fg="#00d5ff",
-        pady=15
+        pady=10
     )
     title.pack(anchor="center")
+
+    version_label = tk.Label(
+        scroll_frame,
+        text=f"Version {version}",
+        font=("Segoe UI", 10, "italic"),
+        bg="#1e1e1e",
+        fg="#aaaaaa",
+        pady=5
+    )
+    version_label.pack(anchor="center")
 
     about_text = (
         "This feature allows you to create desktop shortcuts for games or apps\n"
@@ -55,6 +77,7 @@ def open_help_popup(parent=None):
         "• You can now copy the package name by clicking on the label\n"
         "• I added my custom py library \"jaypy\" to make the repetition code lesser. It's still WIP so it's not in online libraries yet\n"
         "• Make code refactored\n"
+        "• Version of this software and my link on Youtube, Github are now added on help\n"
         "\n"
         "Created by Jayrald John C. Dalman."
     )
@@ -71,6 +94,39 @@ def open_help_popup(parent=None):
         pady=5
     )
     body.pack(anchor="center")
+
+    # Link buttons
+    def open_link(url):
+        webbrowser.open(url)
+
+    link_frame = tk.Frame(scroll_frame, bg="#1e1e1e")
+    link_frame.pack(anchor="center", pady=10)
+
+    yt_button = tk.Button(
+        link_frame,
+        text="YouTube",
+        font=("Segoe UI", 10, "underline"),
+        fg="#00d5ff",
+        bg="#1e1e1e",
+        bd=0,
+        cursor="hand2",
+        activeforeground="#00ffff",
+        command=lambda: open_link("https://www.youtube.com/@dalmanskigd")
+    )
+    yt_button.pack(side="left", padx=10)
+
+    gh_button = tk.Button(
+        link_frame,
+        text="GitHub",
+        font=("Segoe UI", 10, "underline"),
+        fg="#00d5ff",
+        bg="#1e1e1e",
+        bd=0,
+        cursor="hand2",
+        activeforeground="#00ffff",
+        command=lambda: open_link("https://github.com/Dalmanski/Create-Shortcut-on-PC-Emulator")
+    )
+    gh_button.pack(side="left", padx=10)
 
     help_window.mainloop()
 
