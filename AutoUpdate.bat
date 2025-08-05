@@ -21,6 +21,7 @@ powershell -NoProfile -Command ^
   "$json | ConvertTo-Json -Depth 100 | Set-Content $path -Encoding UTF8"
 
 echo === Creating ZIP archive ===
-powershell -NoProfile -Command "Compress-Archive -Path 'dist\*' -DestinationPath 'Create_Shortcut_On_PC_Emulator_%VERSION%.zip' -Force"
+powershell -NoProfile -Command ^
+  "Compress-Archive -Path 'dist\*' -DestinationPath 'zip\Create_Shortcut_On_PC_Emulator_%VERSION%.zip' -Force"
 
 echo === Done! ===
