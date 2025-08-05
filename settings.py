@@ -21,7 +21,7 @@ def detect_paths():
 def load_settings():
     default_paths = detect_paths()
     if os.path.exists(SETTINGS_FILE):
-        with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+        with open(SETTINGS_FILE, "r", encoding="utf-8-sig") as f:
             settings = json.load(f)
     else:
         settings = {}
@@ -44,7 +44,7 @@ def save_settings(lang, country, gpg_path, ld_path, gpg_needed, ld_needed):
         "GooglePlayGames_needed": gpg_needed,
         "LDPlayer9_needed": ld_needed
     }
-    with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+    with open(SETTINGS_FILE, "r", encoding="utf-8-sig") as f:
         json.dump(data, f, indent=4)
     messagebox.showinfo("Saved", "Settings saved successfully!")
 

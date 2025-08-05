@@ -11,10 +11,11 @@ pyinstaller ^
   --hidden-import=help ^
   --hidden-import=settings ^
   --hidden-import=jaypy ^
+  --add-data "settings.json;." ^
   "Create Shortcut Emulator.py"
 
 echo === Updating version in settings.json ===
-powershell -NoProfile -Command ^
+powershell -Command ^
   "$path = 'dist/settings.json';" ^
   "$json = Get-Content $path | ConvertFrom-Json;" ^
   "$json.version = '%VERSION%';" ^

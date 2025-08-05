@@ -5,7 +5,7 @@ a = Analysis(
     ['Create Shortcut Emulator.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[('settings.json', '.')],
     hiddenimports=['help', 'settings', 'jaypy'],
     hookspath=[],
     hooksconfig={},

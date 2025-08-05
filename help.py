@@ -2,10 +2,21 @@ import tkinter as tk
 import webbrowser
 import json
 from jaypy import centerwindow
+import os
+import sys
+
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
 
 def get_version_from_settings():
     try:
-        with open("settings.json", "r") as f:
+        settings_path = resource_path("settings.json")
+        with open(settings_path, "r", encoding="utf-8-sig") as f:
             data = json.load(f)
             return data.get("version", "Unknown")
     except Exception:
