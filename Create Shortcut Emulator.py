@@ -2,7 +2,7 @@ import os
 import sys
 import json
 import tkinter as tk
-from tkinter import messagebox, filedialog, ttk
+from tkinter import messagebox, ttk
 from win32com.client import Dispatch
 import winshell
 from google_play_scraper import search
@@ -10,6 +10,7 @@ import requests
 from PIL import Image, ImageTk
 from io import BytesIO
 from help import open_help_popup
+from settings import open_settings_popup
 
 SETTINGS_FILE = os.path.join(
     os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else __file__),
@@ -17,17 +18,30 @@ SETTINGS_FILE = os.path.join(
 )
 
 def load_settings():
-    if os.path.exists(SETTINGS_FILE):
-        try:
-            with open(SETTINGS_FILE, "r") as f:
-                return json.load(f)
-        except:
-            return {}
-    return {}
+    try:
+        with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
 
 def save_settings(data):
-    with open(SETTINGS_FILE, "w") as f:
-        json.dump(data, f, indent=2)
+    with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4)
+
+def relaunch():
+    python = sys.executable
+    os.execl(python, python, *sys.argv)
+
+def validate_settings(settings):
+    gpg_needed = settings.get("GooglePlayGames_needed")
+    ld_needed = settings.get("LDPlayer9_needed")
+    gpg_path = settings.get("GooglePlayGames_path")
+    ld_path = settings.get("LDPlayer9_path")
+
+    gpg_valid = not gpg_needed or (gpg_path and os.path.exists(gpg_path))
+    ld_valid = not ld_needed or (ld_path and os.path.exists(ld_path) and ld_path.lower().endswith("dnconsole.exe"))
+
+    return gpg_valid and ld_valid
 
 def create_shortcut(name, target, arguments="", icon=None):
     desktop = winshell.desktop()
@@ -54,16 +68,38 @@ def download_icon(url, name):
     except Exception as e:
         print("Icon download error:", e)
         return None
+    
+def center_window(window):
+    window.update_idletasks()
+    width = window.winfo_width()
+    height = window.winfo_height()
+    screen_width = window.winfo_screenwidth()
+    screen_height = window.winfo_screenheight()
+    x = (screen_width - width) // 2
+    y = ((screen_height - height) // 2) - 30
+    window.geometry(f"+{x}+{y}")
 
 class PlayStoreShortcutApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("🎮 Create Shortcut on PC Emulator")
+        
+        self.settings = load_settings()
+        if not validate_settings(self.settings):
+            self.withdraw()
+            messagebox.showinfo("Settings Required", "Please configure paths to Google Play Games and LDPlayer 9.")
+            open_settings_popup()
+            relaunch()
+            return
+
+        self.iconbitmap("icon.ico")
+        self.title("Create Shortcut on PC Emulator") 
+        self.withdraw()
         self.geometry("600x500")
         self.configure(bg="#1e1e1e")
         self.resizable(False, False)
+        center_window(self)
+        self.deiconify()
 
-        self.settings = load_settings()
         self.search_results = []
         self.image_refs = []
         self.selected_item = None
@@ -75,20 +111,12 @@ class PlayStoreShortcutApp(tk.Tk):
         self.style.map("TButton", background=[("active", "#444444")])
         self.style.configure("TEntry", fieldbackground="#2d2d2d", foreground="#ffffff")
         self.style.configure("TCombobox", arrowcolor="#ffffff")
-        
         self.style.map("TCombobox", 
             fieldbackground=[("readonly", "#2d2d2d")],
             selectbackground=[("readonly", "#2d2d2d")],
             background=[("readonly", "#1e1e1e")],
             foreground=[("readonly", "white")]
         )
-
-        if "ldplayer_path" not in self.settings or not os.path.exists(self.settings["ldplayer_path"]):
-            if messagebox.askyesno("LDPlayer", "LDPlayer not found. Do you have it installed?"):
-                self.settings["ldplayer_path"] = self.ask_ldplayer_path()
-                save_settings(self.settings)
-            else:
-                self.settings["ldplayer_path"] = None
 
         search_frame = tk.Frame(self, bg="#1e1e1e")
         search_frame.pack(pady=15, fill=tk.X, padx=20)
@@ -99,8 +127,25 @@ class PlayStoreShortcutApp(tk.Tk):
         entry.bind("<Return>", self.perform_search)
         ttk.Button(search_frame, text="Search", command=self.perform_search).pack(side=tk.LEFT, padx=10)
 
+        btn_frame = tk.Frame(self, bg="#1e1e1e")
+        btn_frame.place(relx=1.0, rely=1.0, x=-10, y=-10, anchor="se")
+
+        settings_button = tk.Button(
+            btn_frame,
+            text="⚙️",
+            command=open_settings_popup,
+            bg="#2d2d2d",
+            fg="white",
+            activebackground="#3a3a3a",
+            activeforeground="white",
+            relief="flat",
+            font=("Segoe UI", 10),
+            cursor="hand2"
+        )
+        settings_button.pack(side=tk.RIGHT, padx=5)
+
         help_button = tk.Button(
-            self,
+            btn_frame,
             text="❓",
             command=open_help_popup,
             bg="#2d2d2d",
@@ -111,8 +156,7 @@ class PlayStoreShortcutApp(tk.Tk):
             font=("Segoe UI", 10),
             cursor="hand2"
         )
-        help_button.place(relx=1.0, rely=1.0, x=-10, y=-10, anchor="se")
-        help_button.bind("<Button-1>", lambda e: open_help_popup())
+        help_button.pack(side=tk.RIGHT)
 
         self.result_frame = tk.Frame(self, bg="#1e1e1e")
         self.result_frame.pack(padx=20, pady=10, fill=tk.BOTH, expand=True)
@@ -136,7 +180,9 @@ class PlayStoreShortcutApp(tk.Tk):
         pkg_frame = tk.Frame(self, bg="#1e1e1e")
         pkg_frame.pack(pady=10, padx=20, fill="x")
         ttk.Label(pkg_frame, text="📦 Selected Package:").pack(side=tk.LEFT)
-        ttk.Label(pkg_frame, textvariable=self.pkg_label_var, foreground="#cccccc").pack(side=tk.LEFT, padx=10)
+        pkg_value_label = ttk.Label(pkg_frame, textvariable=self.pkg_label_var, foreground="#cccccc", cursor="hand2")
+        pkg_value_label.pack(side=tk.LEFT, padx=10)
+        pkg_value_label.bind("<Button-1>", self.copy_selected_pkg_to_clipboard)
 
         plat_frame = tk.Frame(self, bg="#1e1e1e")
         plat_frame.pack(pady=5, padx=20, fill="x")
@@ -148,18 +194,6 @@ class PlayStoreShortcutApp(tk.Tk):
         self.platform_dropdown.pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
 
         ttk.Button(self, text="🎯 Create Shortcut", command=self.create).pack(pady=10)
-
-    def ask_ldplayer_path(self):
-        while True:
-            messagebox.showinfo("LDPlayer", "Select 'dnconsole.exe' from LDPlayer folder.")
-            path = filedialog.askopenfilename(filetypes=[("Executable", "*.exe")])
-            if not path:
-                if not messagebox.askretrycancel("Required", "You must select a file."):
-                    self.quit()
-            elif os.path.basename(path).lower() != "dnconsole.exe":
-                messagebox.showerror("Invalid", "Not 'dnconsole.exe'.")
-            else:
-                return path
 
     def perform_search(self, event=None):
         query = self.search_var.get().strip()
@@ -176,7 +210,12 @@ class PlayStoreShortcutApp(tk.Tk):
             return
 
         try:
-            results = search(query)[:10]
+            results = search(
+                query,
+                lang=self.settings.get("lang", "en"),
+                country=self.settings.get("country", "PH")
+            )[:10]
+
             self.loading_label.place_forget()
 
             if not results:
@@ -261,31 +300,51 @@ class PlayStoreShortcutApp(tk.Tk):
             for child in item_frame.winfo_children():
                 child.configure(bg="#3a3a3a")
             self.selected_item = item_frame
+    
+    def copy_selected_pkg_to_clipboard(self, event=None):
+        pkg = self.pkg_label_var.get()
+        if pkg and pkg != "-":
+            self.clipboard_clear()
+            self.clipboard_append(pkg)
+            self.update()
+
+            x = event.widget.winfo_rootx()
+            y = event.widget.winfo_rooty()
+            tooltip = tk.Toplevel(self)
+            tooltip.overrideredirect(True)
+            tooltip.geometry(f"+{x + 100}+{y}")
+            label = tk.Label(tooltip, text="✅ Copied!", bg="black", fg="white", font=("Segoe UI", 9))
+            label.pack()
+            self.after(1000, tooltip.destroy)
 
     def create(self):
         pkg = self.pkg_label_var.get()
         if not pkg or pkg == "-":
             messagebox.showerror("Select", "Please select a package first.")
             return
+
         name = next((n for n, p in self.search_results if p == pkg), None)
         if not name:
             messagebox.showerror("Error", "App name not found.")
             return
+
         platform = self.platform_var.get()
         if platform == "Google Play Games Beta":
             target = "C:\\Windows\\System32\\cmd.exe"
             arguments = f'/c start "" "googleplaygames://launch/?id={pkg}"'
         else:
-            target = self.settings.get("ldplayer_path", "")
+            target = self.settings.get("LDPlayer9_path", "")
             arguments = f'launchex --index 0 --packagename {pkg}'
             if not os.path.exists(target):
                 messagebox.showerror("LDPlayer", "LDPlayer path invalid.")
                 return
+
         icon_url = ""
         try:
             icon_url = search(pkg)[0]['icon']
         except:
             pass
+
         icon_path = download_icon(icon_url, pkg.split(".")[-1]) if icon_url else None
         try:
             create_shortcut(name, target, arguments, icon_path)
