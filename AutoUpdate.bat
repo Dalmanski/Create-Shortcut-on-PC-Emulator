@@ -1,7 +1,7 @@
 @echo off
 cd "%USERPROFILE%\OneDrive\Documents\Code\Python tkinter\Create Shortcut on PC Emulator"
 
-set "VERSION=1.0"
+set "VERSION=1.0.0"
 
 echo === Building executable with PyInstaller ===
 pyinstaller ^
