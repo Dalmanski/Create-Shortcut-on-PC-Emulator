@@ -10,6 +10,8 @@ SETTINGS_FILE = os.path.join(
     "settings.json"
 )
 
+_settings_window = None
+
 def detect_paths():
     gpg_path = os.path.expandvars(r"%ProgramFiles%\Google\Play Games")
     ldplayer_path = os.path.expandvars(r"%ProgramFiles%\LDPlayer9\dnconsole.exe")
@@ -25,7 +27,6 @@ def load_settings():
             settings = json.load(f)
     else:
         settings = {}
-
     return {
         "lang": settings.get("lang", "en"),
         "country": settings.get("country", "PH"),
@@ -44,8 +45,21 @@ def save_settings(lang, country, gpg_path, ld_path, gpg_needed, ld_needed):
         "GooglePlayGames_needed": gpg_needed,
         "LDPlayer9_needed": ld_needed
     }
-    with open(SETTINGS_FILE, "r", encoding="utf-8-sig") as f:
+    # atomic-ish write
+    tmp = SETTINGS_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8-sig") as f:
         json.dump(data, f, indent=4)
+        f.flush()
+        try:
+            os.fsync(f.fileno())
+        except Exception:
+            pass
+    try:
+        os.replace(tmp, SETTINGS_FILE)
+    except Exception:
+        # fallback
+        with open(SETTINGS_FILE, "w", encoding="utf-8-sig") as f:
+            json.dump(data, f, indent=4)
     messagebox.showinfo("Saved", "Settings saved successfully!")
 
 def open_folder_dialog(label_var):
@@ -65,9 +79,18 @@ def open_file_dialog_for_ldplayer(label_var):
         label_var.set(file_path)
 
 def open_settings_popup(parent=None):
-    settings = load_settings()
+    global _settings_window
+    if _settings_window and _settings_window.winfo_exists():
+        try:
+            _settings_window.lift()
+            _settings_window.focus_force()
+        except Exception:
+            pass
+        return _settings_window
 
+    settings = load_settings()
     win = tk.Toplevel(parent)
+    _settings_window = win
     win.title("Settings")
     win.geometry("600x320")
     win.configure(bg="#1e1e1e")
@@ -110,17 +133,34 @@ def open_settings_popup(parent=None):
     ld_needed_var = tk.BooleanVar(value=settings.get("LDPlayer9_needed", True))
     tk.Checkbutton(container, text="Needed", variable=ld_needed_var, bg="#1e1e1e", fg="white", activebackground="#1e1e1e", selectcolor="#1e1e1e").grid(row=3, column=2, sticky="w")
 
-    save_btn = tk.Button(container, text="Save Settings", command=lambda: save_settings(
-        lang_var.get(),
-        country_var.get(),
-        gpg_var.get(),
-        ld_var.get(),
-        gpg_needed_var.get(),
-        ld_needed_var.get()
-    ))
+    def on_save_and_close():
+        save_settings(
+            lang_var.get(),
+            country_var.get(),
+            gpg_var.get(),
+            ld_var.get(),
+            gpg_needed_var.get(),
+            ld_needed_var.get()
+        )
+        try:
+            win.destroy()
+        except Exception:
+            pass
+
+    save_btn = tk.Button(container, text="Save Settings", command=on_save_and_close)
     save_btn.grid(row=5, column=0, columnspan=3, pady=20)
 
-    win.mainloop()
+    def _on_close():
+        global _settings_window
+        try:
+            _settings_window = None
+        except Exception:
+            pass
+        try:
+            win.destroy()
+        except Exception:
+            pass
 
-if __name__ == "__main__":
-    open_settings_popup()
+    win.protocol("WM_DELETE_WINDOW", _on_close)
+
+    return win

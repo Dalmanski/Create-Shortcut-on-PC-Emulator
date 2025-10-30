@@ -90,6 +90,13 @@ def open_help_popup(parent=None):
         "• Make code refactored\n"
         "• Version of this software and my link on Youtube, Github are now added on help\n"
         "\n"
+        "Date: October 30, 2025\n"
+        "• Fixed on Settings not save on changing language and country\n"
+        "• Prevent Settings Pop-up from duplicating when click on settings icon\n"
+        "• Fixed on not detected LDPlayer file location from settings\n"
+        "• Added loading indicator on game select for faster loading\n"
+        "• Added package name input (manual input link by copy link on play store and paste on the input to get the package name) if the package name of the selected game is \"None\"\n"
+        "\n"
         "Created by Jayrald John C. Dalman."
     )
 

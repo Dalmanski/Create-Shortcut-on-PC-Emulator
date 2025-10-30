@@ -1,9 +1,8 @@
 ﻿{
-  "version": "1.0.0",
-  "lang": "en",
-  "country": "PH",
-  "GooglePlayGames_path": "C:\\Program Files\\Google\\Play Games",
-  "LDPlayer9_path": "Z:/LDPlayer/LDPlayer9/dnconsole.exe",
-  "GooglePlayGames_needed": true,
-  "LDPlayer9_needed": true
+    "lang": "en",
+    "country": "PH",
+    "GooglePlayGames_path": "C:\\Program Files\\Google\\Play Games",
+    "LDPlayer9_path": "Z:/LDPlayer/LDPlayer9/dnconsole.exe",
+    "GooglePlayGames_needed": true,
+    "LDPlayer9_needed": true
 }
