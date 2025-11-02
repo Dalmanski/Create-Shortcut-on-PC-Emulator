@@ -97,6 +97,10 @@ def open_help_popup(parent=None):
         "• Added loading indicator on game select for faster loading\n"
         "• Added package name input (manual input link by copy link on play store and paste on the input to get the package name) if the package name of the selected game is \"None\"\n"
         "\n"
+        "Date: November 02, 2025\n"
+        "• Some Games cannot successfully create shortcut due to wrong file encode input. Now, it fixed by using regex, but idk if it's solved on all of them\n"
+        "• Added function to search Play Store URL on Game Search\n"
+        "\n"
         "Created by Jayrald John C. Dalman."
     )
 

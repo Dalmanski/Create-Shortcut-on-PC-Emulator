@@ -6,7 +6,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk, filedialog
 from win32com.client import Dispatch
 import winshell
-from google_play_scraper import search
+from google_play_scraper import search, app
 import requests
 from PIL import Image, ImageTk
 from io import BytesIO
@@ -14,6 +14,7 @@ from help import open_help_popup
 from settings import open_settings_popup, save_settings, load_settings as load_settings_from_file
 from jaypy import centerwindow
 import urllib.parse
+import re
 
 SETTINGS_FILE = os.path.join(
     os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else __file__),
@@ -42,10 +43,68 @@ def _normalize_path(p):
     p = os.path.normpath(p)
     return p
 
+def resolve_shortcut(path):
+    try:
+        if not path:
+            return None
+        p = _normalize_path(path)
+        ext = os.path.splitext(p)[1].lower()
+        if ext != ".lnk":
+            return None
+        if not os.path.exists(p):
+            return None
+        shell = Dispatch("WScript.Shell")
+        sc = shell.CreateShortCut(p)
+        tgt = sc.Targetpath
+        if not tgt:
+            return None
+        return _normalize_path(tgt)
+    except Exception:
+        return None
+
+def _split_exe_and_args(target):
+    if not target:
+        return ("", "")
+    t = target.strip().strip('"').strip("'")
+    resolved = resolve_shortcut(t)
+    if resolved:
+        t = resolved
+    tokens = re.split(r'\s+', t, maxsplit=1)
+    first = tokens[0] if tokens else ""
+    first_norm = _normalize_path(first)
+    if first_norm and os.path.exists(first_norm) and first_norm.lower().endswith(".exe"):
+        args = tokens[1] if len(tokens) > 1 else ""
+        return (first_norm, args)
+    low = t.lower()
+    if "launchex" in low:
+        idx = low.find("launchex")
+        exe_part = t[:idx].strip().strip('"').strip("'")
+        args_part = t[idx:].strip()
+        exe_norm = _normalize_path(exe_part)
+        if exe_norm and os.path.exists(exe_norm):
+            return (exe_norm, args_part)
+    if os.path.isdir(first_norm):
+        candidate = os.path.join(first_norm, "dnconsole.exe")
+        if os.path.exists(candidate):
+            rest = tokens[1] if len(tokens) > 1 else ""
+            return (candidate, rest)
+    return (_normalize_path(first), tokens[1] if len(tokens) > 1 else "")
+
+def _sanitize_name(name):
+    name = name.strip()
+    name = re.sub(r'[<>:"/\\|?*\x00-\x1F]', '-', name)
+    name = name[:150].strip()
+    if not name:
+        name = "Shortcut"
+    return name
+
 def _check_dnconsole_path(path):
     if not path:
         return False
     path = _normalize_path(path)
+    resolved = resolve_shortcut(path)
+    if resolved:
+        path = resolved
     if os.path.exists(path) and os.path.basename(path).lower() == "dnconsole.exe":
         return True
     if os.path.isdir(path):
@@ -71,15 +130,35 @@ def validate_settings(settings):
 
 def create_shortcut(name, target, arguments="", icon=None):
     desktop = winshell.desktop()
-    path = os.path.join(desktop, f"{name}.lnk")
+    safe_name = _sanitize_name(name)
+    path = os.path.join(desktop, f"{safe_name}.lnk")
     shell = Dispatch('WScript.Shell')
+    exe, extra_args = _split_exe_and_args(target)
+    final_args = " ".join([a for a in [extra_args.strip(), arguments.strip()] if a]).strip()
+    if not exe:
+        exe = _normalize_path(target)
     shortcut = shell.CreateShortCut(path)
-    shortcut.Targetpath = target
-    if arguments:
-        shortcut.Arguments = arguments
-    if icon:
-        shortcut.IconLocation = icon
-    shortcut.WorkingDirectory = os.path.dirname(target)
+    shortcut.Targetpath = exe
+    if final_args:
+        shortcut.Arguments = final_args
+    if icon and os.path.exists(icon) and os.path.getsize(icon) > 0:
+        try:
+            shortcut.IconLocation = icon
+        except Exception:
+            try:
+                shortcut.IconLocation = f"{icon},0"
+            except Exception:
+                pass
+    wd = ""
+    try:
+        if exe and os.path.exists(exe):
+            wd = os.path.dirname(exe)
+        else:
+            wd = os.path.dirname(target) or os.path.expanduser("~")
+    except Exception:
+        wd = os.path.expanduser("~")
+    if wd:
+        shortcut.WorkingDirectory = wd
     shortcut.save()
     return path
 
@@ -122,6 +201,50 @@ def extract_package_id(text):
         return txt
     return txt
 
+def _get_app_dir():
+    return os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else __file__)
+
+def _icons_dir():
+    d = os.path.join(_get_app_dir(), "icons")
+    try:
+        os.makedirs(d, exist_ok=True)
+    except Exception:
+        pass
+    return d
+
+def _local_icon_candidates_for_name(name):
+    if not name:
+        return []
+    base = _sanitize_name(name)
+    icons_folder = _icons_dir()
+    candidates = []
+    candidates.append(os.path.join(icons_folder, f"{base}.ico"))
+    candidates.append(os.path.join(icons_folder, f"{base}.png"))
+    candidates.append(os.path.join(icons_folder, f"{base}.jpg"))
+    candidates.append(os.path.join(icons_folder, f"{base}.jpeg"))
+    return candidates
+
+def _find_local_icon(name):
+    for p in _local_icon_candidates_for_name(name):
+        try:
+            if os.path.exists(p) and os.path.getsize(p) > 0:
+                return p
+        except Exception:
+            continue
+    return None
+
+def _ensure_ico_from_image(src_path, dest_ico_path):
+    try:
+        if os.path.exists(dest_ico_path) and os.path.getsize(dest_ico_path) > 0:
+            return dest_ico_path
+        with Image.open(src_path) as im:
+            im = im.convert("RGBA")
+            im = im.resize((64, 64), Image.Resampling.LANCZOS)
+            im.save(dest_ico_path, format="ICO", sizes=[(64, 64)])
+        return dest_ico_path
+    except Exception:
+        return None
+
 class PlayStoreShortcutApp(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -137,11 +260,10 @@ class PlayStoreShortcutApp(tk.Tk):
         except Exception:
             pass
         self.title("Create Shortcut on PC Emulator")
-        self.geometry("600x500")
+        self.geometry("600x550")
         self.configure(bg="#1e1e1e")
         self.resizable(False, False)
         centerwindow(self, offsety=-40)
-
         self.search_results = []
         self.image_refs = {}
         self.icon_labels = {}
@@ -151,7 +273,7 @@ class PlayStoreShortcutApp(tk.Tk):
         self.pkg_labels = {}
         self.normal_bg = "#2d2d2d"
         self.selected_bg = "#3a3a3a"
-
+        self.icons_folder = _icons_dir()
         self._setup_styles()
         self._create_widgets()
 
@@ -188,22 +310,19 @@ class PlayStoreShortcutApp(tk.Tk):
     def _create_widgets(self):
         search_frame = tk.Frame(self, bg="#1e1e1e")
         search_frame.pack(pady=15, fill=tk.X, padx=20)
-        ttk.Label(search_frame, text="🔍 Search Google Play:").pack(anchor="w")
+        ttk.Label(search_frame, text="🔍 Search Google Play (or paste Play Store URL):").pack(anchor="w")
         self.search_var = tk.StringVar()
         self.search_entry = ttk.Entry(search_frame, textvariable=self.search_var)
         self.search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         self.search_entry.bind("<Return>", self.perform_search)
         self.search_btn = ttk.Button(search_frame, text="Search", command=self.perform_search)
         self.search_btn.pack(side=tk.LEFT, padx=10)
-
         btn_frame = tk.Frame(self, bg="#1e1e1e")
         btn_frame.place(relx=1.0, rely=1.0, x=-10, y=-10, anchor="se")
         self._create_tool_button(btn_frame, "⚙️", self._open_settings).pack(side=tk.RIGHT, padx=5)
         self._create_tool_button(btn_frame, "❓", open_help_popup).pack(side=tk.RIGHT)
-
         self.result_frame = tk.Frame(self, bg="#1e1e1e")
         self.result_frame.pack(padx=20, pady=10, fill=tk.BOTH, expand=True)
-
         self.canvas = tk.Canvas(self.result_frame, bg=self.normal_bg, height=240, highlightthickness=0)
         self.scrollbar = tk.Scrollbar(self.result_frame, orient="vertical", command=self.canvas.yview)
         self.scrollable_frame = tk.Frame(self.canvas, bg=self.normal_bg)
@@ -212,36 +331,27 @@ class PlayStoreShortcutApp(tk.Tk):
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
         self.canvas.pack(side="left", fill="both", expand=True)
         self.scrollbar.pack(side="right", fill="y")
-
         self.empty_label = ttk.Label(self.canvas, text="Please search the game", foreground="#888888")
         self.empty_label.place(relx=0.5, rely=0.5, anchor="center")
         self.loading_label = ttk.Label(self.canvas, text="🔄 Loading...", foreground="#aaaaaa")
-
         self.pkg_label_var = tk.StringVar(value="-")
         pkg_frame = tk.Frame(self, bg="#1e1e1e")
         pkg_frame.pack(pady=10, padx=20, fill="x")
-
         lbl_static = ttk.Label(pkg_frame, text="📦 Selected Package:")
         lbl_static.grid(row=0, column=0, sticky="w")
-
         pkg_label = ttk.Label(pkg_frame, textvariable=self.pkg_label_var, foreground="#cccccc", cursor="hand2", background="#1e1e1e")
         pkg_label.grid(row=0, column=1, sticky="w", padx=(8, 8))
         pkg_label.bind("<Button-1>", self.copy_selected_pkg_to_clipboard)
-
         self.pkg_entry = ttk.Entry(pkg_frame)
         self.pkg_entry.grid(row=0, column=2, sticky="ew", padx=(4, 4))
         self.pkg_entry.grid_remove()
-
         self.pkg_use_btn = ttk.Button(pkg_frame, text="Use", command=self._use_manual_pkg)
         self.pkg_use_btn.grid(row=0, column=3, sticky="e")
         self.pkg_use_btn.grid_remove()
-
         pkg_frame.grid_columnconfigure(2, weight=1)
-
-        self.pkg_tip = tk.Label(pkg_frame, text="We cannot find their package name, pls copy the link from play store and paste here", fg="#ffdd88", bg="#1e1e1e", font=("Segoe UI", 8), wraplength=420, justify="left")
+        self.pkg_tip = tk.Label(pkg_frame, text="We can't find their package name, pls copy the link URL and paste here", fg="#ffdd88", bg="#1e1e1e", font=("Segoe UI", 8), wraplength=420, justify="left")
         self.pkg_tip.grid(row=1, column=1, columnspan=3, sticky="w", pady=(6, 0))
         self.pkg_tip.grid_remove()
-
         plat_frame = tk.Frame(self, bg="#1e1e1e")
         plat_frame.pack(pady=5, padx=20, fill="x")
         ttk.Label(plat_frame, text="🖥 Platform:").pack(side=tk.LEFT)
@@ -249,7 +359,6 @@ class PlayStoreShortcutApp(tk.Tk):
         ttk.Combobox(plat_frame, textvariable=self.platform_var,
                      values=["Google Play Games Beta", "LDPlayer 9"],
                      state="readonly").pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
-
         ttk.Button(self, text="🎯 Create Shortcut", command=self.create).pack(pady=10)
 
     def _create_tool_button(self, parent, text, command):
@@ -271,9 +380,20 @@ class PlayStoreShortcutApp(tk.Tk):
         t.start()
 
     def _search_thread(self, query):
+        pkg_candidate = extract_package_id(query)
+        results = []
+        err = None
         try:
-            results = search(query, lang=self.settings.get("lang", "en"), country=self.settings.get("country", "PH"))[:10]
-            err = None
+            if (query.startswith("http") or "play.google" in query or "id=" in query) and pkg_candidate:
+                try:
+                    info = app(pkg_candidate, lang=self.settings.get("lang", "en"), country=self.settings.get("country", "PH"))
+                    title = info.get("title") or info.get("name") or info.get("appId") or pkg_candidate
+                    icon = info.get("icon") or info.get("iconUrl") or ""
+                    results = [{"title": title, "appId": pkg_candidate, "icon": icon}]
+                except Exception:
+                    results = search(query, lang=self.settings.get("lang", "en"), country=self.settings.get("country", "PH"))[:10]
+            else:
+                results = search(query, lang=self.settings.get("lang", "en"), country=self.settings.get("country", "PH"))[:10]
         except Exception as e:
             results = []
             err = e
@@ -290,10 +410,10 @@ class PlayStoreShortcutApp(tk.Tk):
             return
         self.scrollable_frame.grid_columnconfigure(0, weight=1)
         self.scrollable_frame.grid_columnconfigure(1, weight=1)
-        for idx, app in enumerate(results):
-            name = app.get('title') or app.get('name') or "Unknown"
-            pkg = app.get('appId')
-            icon_url = app.get('icon', "")
+        for idx, appinfo in enumerate(results):
+            name = appinfo.get('title') or appinfo.get('name') or "Unknown"
+            pkg = appinfo.get('appId') or appinfo.get('appId')
+            icon_url = appinfo.get('icon', "") or appinfo.get('iconUrl', "")
             item = tk.Frame(self.scrollable_frame, bg=self.normal_bg, padx=6, pady=4)
             item.grid(row=idx // 2, column=idx % 2, padx=6, pady=6, sticky="nsew")
             item.bind("<Button-1>", lambda e, p=pkg, f=item, i=idx: self.select_package(p, f, i))
@@ -302,16 +422,65 @@ class PlayStoreShortcutApp(tk.Tk):
             self.icon_labels[idx] = icon_lbl
             self._create_name_label(item, name, pkg, item, idx)
             self.search_results.append((name, pkg or "", icon_url))
-            if icon_url:
-                threading.Thread(target=self._download_icon_thread, args=(icon_url, idx), daemon=True).start()
+            local_icon = _find_local_icon(name)
+            if local_icon:
+                try:
+                    if local_icon.lower().endswith((".png", ".jpg", ".jpeg")):
+                        ico_target = os.path.join(self.icons_folder, f"{_sanitize_name(name)}.ico")
+                        _ensure_ico_from_image(local_icon, ico_target)
+                    pil_img = None
+                    try:
+                        pil_img = Image.open(local_icon).convert("RGBA")
+                    except Exception:
+                        ico_fallback = os.path.join(self.icons_folder, f"{_sanitize_name(name)}.ico")
+                        if os.path.exists(ico_fallback):
+                            pil_img = Image.open(ico_fallback).convert("RGBA")
+                    if pil_img:
+                        img = pil_img.resize((48, 48), Image.Resampling.LANCZOS)
+                        photo = ImageTk.PhotoImage(img)
+                        icon_lbl.configure(image=photo, text="")
+                        icon_lbl.image = photo
+                        ico_path = _find_local_icon(name)
+                        if ico_path and ico_path.lower().endswith(".ico"):
+                            self.downloaded_icon_files[idx] = ico_path
+                        else:
+                            created_ico = os.path.join(self.icons_folder, f"{_sanitize_name(name)}.ico")
+                            if os.path.exists(created_ico):
+                                self.downloaded_icon_files[idx] = created_ico
+                except Exception:
+                    pass
+            else:
+                if icon_url:
+                    threading.Thread(target=self._download_icon_thread, args=(icon_url, idx, name), daemon=True).start()
 
-    def _download_icon_thread(self, url, idx):
+    def _download_icon_thread(self, url, idx, name=None):
         try:
             response = requests.get(url, timeout=10)
             response.raise_for_status()
             pil_img = Image.open(BytesIO(response.content)).convert("RGBA")
         except Exception:
             pil_img = None
+        try:
+            if pil_img and name:
+                base = _sanitize_name(name)
+                png_path = os.path.join(self.icons_folder, f"{base}.png")
+                ico_path = os.path.join(self.icons_folder, f"{base}.ico")
+                try:
+                    pil_img.save(png_path, format="PNG")
+                except Exception:
+                    pass
+                try:
+                    pil_img.resize((64, 64), Image.Resampling.LANCZOS).save(ico_path, format="ICO", sizes=[(64, 64)])
+                    self.downloaded_icon_files[idx] = ico_path
+                except Exception:
+                    try:
+                        tmp = os.path.join(os.getenv("TEMP") or ".", f"{base}.ico")
+                        pil_img.resize((64, 64), Image.Resampling.LANCZOS).save(tmp, format="ICO", sizes=[(64, 64)])
+                        self.downloaded_icon_files[idx] = tmp
+                    except Exception:
+                        pass
+        except Exception:
+            pass
         self.after(0, lambda: self._set_icon_image(idx, pil_img))
 
     def _set_icon_image(self, idx, pil_img):
@@ -322,12 +491,21 @@ class PlayStoreShortcutApp(tk.Tk):
             photo = ImageTk.PhotoImage(img)
             lbl = self.icon_labels.get(idx)
             if lbl:
-                lbl.configure(image=photo, text="")
-                lbl.image = photo
+                current = getattr(lbl, "image", None)
+                if not current:
+                    lbl.configure(image=photo, text="")
+                    lbl.image = photo
             try:
-                icon_path = os.path.join(os.getenv("TEMP") or ".", f"gpg_icon_{idx}.ico")
-                pil_img.save(icon_path, format='ICO', sizes=[(64, 64)])
-                self.downloaded_icon_files[idx] = icon_path
+                if idx < len(self.search_results):
+                    name, pkg, icon_url = self.search_results[idx]
+                    base = _sanitize_name(name)
+                    ico_path = os.path.join(self.icons_folder, f"{base}.ico")
+                    if not os.path.exists(ico_path):
+                        try:
+                            pil_img.resize((64, 64), Image.Resampling.LANCZOS).save(ico_path, format="ICO", sizes=[(64, 64)])
+                            self.downloaded_icon_files[idx] = ico_path
+                        except Exception:
+                            pass
             except Exception:
                 pass
         except Exception:
@@ -470,8 +648,20 @@ class PlayStoreShortcutApp(tk.Tk):
                 messagebox.showerror("LDPlayer", f"LDPlayer path still invalid after your action.\nChecked: {target}")
                 return
         icon_path = None
-        if self.selected_index is not None:
+        if name:
+            local_icon = _find_local_icon(name)
+            if local_icon:
+                if local_icon.lower().endswith((".png", ".jpg", ".jpeg")):
+                    ico_created = os.path.join(self.icons_folder, f"{_sanitize_name(name)}.ico")
+                    _ensure_ico_from_image(local_icon, ico_created)
+                    if os.path.exists(ico_created):
+                        icon_path = ico_created
+                elif local_icon.lower().endswith(".ico"):
+                    icon_path = local_icon
+        if not icon_path and self.selected_index is not None:
             icon_path = self.downloaded_icon_files.get(self.selected_index)
+        if icon_path and (not os.path.exists(icon_path) or os.path.getsize(icon_path) == 0):
+            icon_path = None
         try:
             create_shortcut(name, target, arguments, icon_path)
             messagebox.showinfo("Success", f"Shortcut created for: {name}")
