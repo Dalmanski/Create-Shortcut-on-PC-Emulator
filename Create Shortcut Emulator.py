@@ -15,6 +15,7 @@ from settings import open_settings_popup, save_settings, load_settings as load_s
 from jaypy import centerwindow
 import urllib.parse
 import re
+import shutil
 
 SETTINGS_FILE = os.path.join(
     os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else __file__),
@@ -30,6 +31,17 @@ def load_settings():
                 return json.load(f)
         except Exception:
             return {}
+
+def _save_settings_file(settings_dict):
+    try:
+        d = os.path.dirname(SETTINGS_FILE)
+        if d:
+            os.makedirs(d, exist_ok=True)
+        with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+            json.dump(settings_dict, f, indent=2, ensure_ascii=False)
+        return True
+    except Exception:
+        return False
 
 def relaunch():
     os.execl(sys.executable, sys.executable, *sys.argv)
@@ -205,7 +217,7 @@ def _get_app_dir():
     return os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else __file__)
 
 def _icons_dir():
-    d = os.path.join(_get_app_dir(), "icons")
+    d = os.path.join(_get_app_dir(), "gamelist_icons")
     try:
         os.makedirs(d, exist_ok=True)
     except Exception:
@@ -284,6 +296,12 @@ class PlayStoreShortcutApp(tk.Tk):
         def _reload_settings(event=None):
             try:
                 self.settings = load_settings()
+                idx = self.settings.get("LDPlayer9_index")
+                if idx is not None:
+                    try:
+                        self.ld_index_var.set(str(int(idx)))
+                    except Exception:
+                        pass
             except Exception:
                 pass
         win.bind("<Destroy>", _reload_settings)
@@ -354,11 +372,29 @@ class PlayStoreShortcutApp(tk.Tk):
         self.pkg_tip.grid_remove()
         plat_frame = tk.Frame(self, bg="#1e1e1e")
         plat_frame.pack(pady=5, padx=20, fill="x")
-        ttk.Label(plat_frame, text="🖥 Platform:").pack(side=tk.LEFT)
+        plat_frame.grid_columnconfigure(1, weight=1)
+        ttk.Label(plat_frame, text="🖥 Platform:").grid(row=0, column=0, sticky="w")
         self.platform_var = tk.StringVar(value="Google Play Games Beta")
-        ttk.Combobox(plat_frame, textvariable=self.platform_var,
-                     values=["Google Play Games Beta", "LDPlayer 9"],
-                     state="readonly").pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
+        self.platform_combo = ttk.Combobox(plat_frame, textvariable=self.platform_var,
+                                           values=["Google Play Games Beta", "LDPlayer 9"],
+                                           state="readonly")
+        self.platform_combo.grid(row=0, column=1, sticky="ew", padx=(8, 6))
+        self.ld_index_label = ttk.Label(plat_frame, text="Idx [Instance]:\n(Main = 0)")
+        self.ld_index_var = tk.StringVar(value=str(self.settings.get("LDPlayer9_index", 0) if self.settings.get("LDPlayer9_index", None) is not None else "0"))
+        def _validate_index(proposed):
+            if proposed == "":
+                return True
+            return proposed.isdigit()
+        vcmd = (self.register(lambda P: _validate_index(P)), '%P')
+        self.ld_index_spin = tk.Spinbox(plat_frame, from_=0, to=9999, textvariable=self.ld_index_var, validate="key", validatecommand=vcmd, width=6, bd=0, relief="flat", highlightthickness=0)
+        self.ld_index_label.grid(row=0, column=2, sticky="e", padx=(6, 2))
+        self.ld_index_spin.grid(row=0, column=3, sticky="w")
+        if self.platform_var.get() != "LDPlayer 9":
+            self.ld_index_label.grid_remove()
+            self.ld_index_spin.grid_remove()
+        self.platform_var.trace_add("write", lambda *a: self._on_platform_changed())
+        self.ld_index_var.trace_add("write", lambda *a: self._on_ld_index_changed())
+        self.ld_index_spin.configure(bg=self.normal_bg, fg="white", insertbackground="white")
         ttk.Button(self, text="🎯 Create Shortcut", command=self.create).pack(pady=10)
 
     def _create_tool_button(self, parent, text, command):
@@ -366,11 +402,32 @@ class PlayStoreShortcutApp(tk.Tk):
                          activebackground=self.selected_bg, activeforeground="white",
                          relief="flat", font=("Segoe UI", 10), cursor="hand2")
 
+    def _clear_icons_folder(self):
+        try:
+            folder = self.icons_folder
+            if not folder:
+                return
+            if os.path.exists(folder):
+                for entry in os.listdir(folder):
+                    path = os.path.join(folder, entry)
+                    try:
+                        if os.path.isfile(path) or os.path.islink(path):
+                            os.remove(path)
+                        elif os.path.isdir(path):
+                            shutil.rmtree(path)
+                    except Exception:
+                        pass
+            else:
+                os.makedirs(folder, exist_ok=True)
+        except Exception:
+            pass
+
     def perform_search(self, event=None):
         query = self.search_var.get().strip()
         if not query:
             return
         self.clear_results()
+        self._clear_icons_folder()
         self.pkg_label_var.set("-")
         self.empty_label.place_forget()
         self.loading_label.place(relx=0.5, rely=0.5, anchor="center")
@@ -600,6 +657,28 @@ class PlayStoreShortcutApp(tk.Tk):
             tk.Label(tooltip, text="✅ Copied!", bg="black", fg="white", font=("Segoe UI", 9)).pack()
             self.after(1000, tooltip.destroy)
 
+    def _on_platform_changed(self):
+        plat = self.platform_var.get()
+        if plat == "LDPlayer 9":
+            self.ld_index_label.grid()
+            self.ld_index_spin.grid()
+        else:
+            self.ld_index_label.grid_remove()
+            self.ld_index_spin.grid_remove()
+
+    def _on_ld_index_changed(self):
+        try:
+            idx_raw = self.ld_index_var.get().strip()
+            idx_int = int(idx_raw) if idx_raw != "" else 0
+        except Exception:
+            idx_int = 0
+        try:
+            s = load_settings()
+            s["LDPlayer9_index"] = idx_int
+            _save_settings_file(s)
+        except Exception:
+            pass
+
     def create(self):
         pkg = self.pkg_label_var.get()
         if not pkg or pkg == "-":
@@ -627,14 +706,8 @@ class PlayStoreShortcutApp(tk.Tk):
                     if file_path:
                         file_path = _normalize_path(file_path)
                         s = load_settings()
-                        save_settings(
-                            s.get("lang","en"),
-                            s.get("country","PH"),
-                            s.get("GooglePlayGames_path",""),
-                            file_path,
-                            s.get("GooglePlayGames_needed", True),
-                            s.get("LDPlayer9_needed", True)
-                        )
+                        s["LDPlayer9_path"] = file_path
+                        _save_settings_file(s)
                         try:
                             self.settings = load_settings()
                         except Exception:
@@ -643,7 +716,18 @@ class PlayStoreShortcutApp(tk.Tk):
                     else:
                         return
             target = _normalize_path(target_candidate)
-            arguments = f'launchex --index 0 --packagename {pkg}'
+            try:
+                idx_raw = self.ld_index_var.get().strip()
+                idx_int = int(idx_raw) if idx_raw != "" else 0
+            except Exception:
+                idx_int = 0
+            try:
+                s = load_settings()
+                s["LDPlayer9_index"] = idx_int
+                _save_settings_file(s)
+            except Exception:
+                pass
+            arguments = f'launchex --index {idx_int} --packagename {pkg}'
             if not _check_dnconsole_path(target):
                 messagebox.showerror("LDPlayer", f"LDPlayer path still invalid after your action.\nChecked: {target}")
                 return

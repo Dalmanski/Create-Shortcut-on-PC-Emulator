@@ -14,15 +14,13 @@ pyinstaller ^
   --add-data "settings.json;." ^
   "Create Shortcut Emulator.py"
 
-echo === Updating version in settings.json ===
-powershell -Command ^
-  "$path = 'dist/settings.json';" ^
-  "$json = Get-Content $path | ConvertFrom-Json;" ^
-  "$json.version = '%VERSION%';" ^
-  "$json | ConvertTo-Json -Depth 100 | Set-Content $path -Encoding UTF8"
+echo === Updating version in dist/settings.json ===
+powershell -NoProfile -Command ^
+  "$path = 'dist\\settings.json'; if (-not (Test-Path $path)) { Write-Host 'Warning: dist\\settings.json not found, skipping version update.'; exit 0 } ; " ^
+  "$raw = Get-Content -Raw -Encoding UTF8 $path; $obj = $raw | ConvertFrom-Json; $ht = @{}; $obj.psobject.properties | ForEach-Object { $ht[$_.Name] = $_.Value }; $ht['version'] = '%VERSION%'; $ht | ConvertTo-Json -Depth 100 | Set-Content -Encoding UTF8 $path"
 
 echo === Creating ZIP archive ===
 powershell -NoProfile -Command ^
-  "Compress-Archive -Path 'dist\*' -DestinationPath 'zip\Create_Shortcut_On_PC_Emulator_%VERSION%.zip' -Force"
+  "Compress-Archive -Path 'dist\\*' -DestinationPath 'zip\\Create_Shortcut_On_PC_Emulator_%VERSION%.zip' -Force"
 
 echo === Done! ===

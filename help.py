@@ -10,7 +10,6 @@ def resource_path(relative_path):
         base_path = sys._MEIPASS
     except Exception:
         base_path = os.path.abspath(".")
-
     return os.path.join(base_path, relative_path)
 
 def get_version_from_settings():
@@ -24,7 +23,6 @@ def get_version_from_settings():
 
 def open_help_popup(parent=None):
     version = get_version_from_settings()
-
     help_window = tk.Toplevel(parent)
     help_window.title("About")
     help_window.geometry("550x350")
@@ -45,7 +43,6 @@ def open_help_popup(parent=None):
 
     canvas.create_window((0, 0), window=scroll_frame, anchor="nw")
     canvas.configure(yscrollcommand=scrollbar.set)
-
     canvas.pack(side="left", fill="both", expand=True)
     scrollbar.pack(side="right", fill="y")
 
@@ -101,6 +98,11 @@ def open_help_popup(parent=None):
         "• Some Games cannot successfully create shortcut due to wrong file encode input. Now, it fixed by using regex, but idk if it's solved on all of them\n"
         "• Added function to search Play Store URL on Game Search\n"
         "\n"
+        "Date: November 29, 2025\n"
+        "• You can now change the index of the LDPlayer. The index indicates which instance of LDPlayer to use when multiple instances are running\n"
+        "• Added mouse scroll up and down vertical function on help window\n"
+        "• Found abnormality of producing game icons, so need to delete all of them from the \"gamelist_icons\" folder then reproduce the icon again when searching. Use temporary storage instead of \"gamelist_icons\" in the future updates\n"
+        "\n"
         "Created by Jayrald John C. Dalman."
     )
 
@@ -117,7 +119,6 @@ def open_help_popup(parent=None):
     )
     body.pack(anchor="center")
 
-    # Link buttons
     def open_link(url):
         webbrowser.open(url)
 
@@ -150,6 +151,49 @@ def open_help_popup(parent=None):
     )
     gh_button.pack(side="left", padx=10)
 
+    def _on_mousewheel(event):
+        if getattr(event, "num", None) == 4:
+            canvas.yview_scroll(-1, "units")
+            return
+        if getattr(event, "num", None) == 5:
+            canvas.yview_scroll(1, "units")
+            return
+        delta = 0
+        try:
+            delta = int(event.delta)
+        except Exception:
+            try:
+                delta = event.delta
+            except Exception:
+                delta = 0
+        if delta:
+            if abs(delta) >= 120:
+                steps = int(-1 * (delta / 120))
+            else:
+                steps = -1 if delta > 0 else 1
+            canvas.yview_scroll(steps, "units")
+
+    def _bind_mousewheel(event):
+        help_window.bind_all("<MouseWheel>", _on_mousewheel)
+        help_window.bind_all("<Button-4>", _on_mousewheel)
+        help_window.bind_all("<Button-5>", _on_mousewheel)
+
+    def _unbind_mousewheel(event):
+        try:
+            help_window.unbind_all("<MouseWheel>")
+        except Exception:
+            pass
+        try:
+            help_window.unbind_all("<Button-4>")
+        except Exception:
+            pass
+        try:
+            help_window.unbind_all("<Button-5>")
+        except Exception:
+            pass
+
+    canvas.bind("<Enter>", _bind_mousewheel)
+    canvas.bind("<Leave>", _unbind_mousewheel)
     help_window.mainloop()
 
 if __name__ == "__main__":
