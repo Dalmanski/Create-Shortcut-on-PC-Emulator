@@ -470,7 +470,8 @@ class PlayStoreShortcutApp(tk.Tk):
                     results = [{"title": title, "appId": pkg_candidate, "icon": icon, "link": full_link}]
                 except Exception:
                     results = []
-                    sr = search(query, lang=self.settings.get("lang", "en"), country=self.settings.get("country", "PH"))[:10]
+                    sr_raw = search(query, lang=self.settings.get("lang", "en"), country=self.settings.get("country", "PH")) or []
+                    sr = sr_raw[:10]
                     for r in sr:
                         title = r.get("title") or r.get("name") or ""
                         appid = r.get("appId") or ""
@@ -478,7 +479,8 @@ class PlayStoreShortcutApp(tk.Tk):
                         link = f"https://play.google.com/store/apps/details?id={appid}" if appid else f"https://play.google.com/store/search?q={urllib.parse.quote(title)}&c=apps"
                         results.append({"title": title, "appId": appid, "icon": icon, "link": link})
             else:
-                sr = search(query, lang=self.settings.get("lang", "en"), country=self.settings.get("country", "PH"))[:10]
+                sr_raw = search(query, lang=self.settings.get("lang", "en"), country=self.settings.get("country", "PH")) or []
+                sr = sr_raw[:10]
                 for r in sr:
                     title = r.get("title") or r.get("name") or ""
                     appid = r.get("appId") or ""
@@ -490,9 +492,17 @@ class PlayStoreShortcutApp(tk.Tk):
             err = e
         self.after(0, lambda: self._display_results(results, err))
 
+
     def _display_results(self, results, err=None):
         self.loading_label.place_forget()
         self.search_btn.config(state="normal")
+        if err and not results:
+            try:
+                messagebox.showinfo("Search", "Game not found")
+            except Exception:
+                pass
+            self.empty_label.place(relx=0.5, rely=0.5, anchor="center")
+            return
         if err:
             messagebox.showerror("Error", str(err))
             return

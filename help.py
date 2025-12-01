@@ -107,6 +107,9 @@ def open_help_popup(parent=None):
         "• If the package name is NA, it will get the full link and get the package name there\n"
         "• Added Play Store Link text label, when it click, it will pop up on the website\n"
         "\n"
+        "Date:December 01, 2025\n"
+        "• Add pop up \"Game Not Found\" when the game is not found instead it said \"'NoneType' object is not subscriptable\"\n"
+        "\n"
         "Created by Jayrald John C. Dalman."
     )
 
