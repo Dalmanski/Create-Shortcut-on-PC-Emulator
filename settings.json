@@ -1,9 +1,10 @@
-{
+﻿{
   "lang": "en",
   "country": "PH",
   "GooglePlayGames_path": "C:\\Program Files\\Google\\Play Games",
   "LDPlayer9_path": "Z:/LDPlayer/LDPlayer9/dnconsole.exe",
   "GooglePlayGames_needed": true,
   "LDPlayer9_needed": true,
+  "shortcuts_folder": "C:/Users/Jayrald John/Downloads/Shortcut from my app",
   "LDPlayer9_index": 1
 }

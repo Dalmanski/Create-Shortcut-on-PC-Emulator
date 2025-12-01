@@ -68,7 +68,7 @@ def open_help_popup(parent=None):
 
     about_text = (
         "This feature allows you to create desktop shortcuts for games or apps\n"
-        "launched through Google Play Games or the LDPlayer emulator. With a single click,"
+        "launched through Google Play Games or the LDPlayer emulator. With a single click, "
         "you can directly launch your favorite game without manually opening the emulator.\n"
         "\n"
         "Update (Note: Not final. I will revise this later):\n"
@@ -107,8 +107,10 @@ def open_help_popup(parent=None):
         "• If the package name is NA, it will get the full link and get the package name there\n"
         "• Added Play Store Link text label, when it click, it will pop up on the website\n"
         "\n"
-        "Date:December 01, 2025\n"
+        "Date: December 01, 2025\n"
         "• Add pop up \"Game Not Found\" when the game is not found instead it said \"'NoneType' object is not subscriptable\"\n"
+        "• Change the system of storing the game icon, it is now on the temp folder\n"
+        "• Add settings of where it stores the game folder when the game shortcut is created\n"
         "\n"
         "Created by Jayrald John C. Dalman."
     )

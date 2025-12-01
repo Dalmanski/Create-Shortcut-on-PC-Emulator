@@ -11,37 +11,18 @@ import requests
 from PIL import Image, ImageTk
 from io import BytesIO
 from help import open_help_popup
-from settings import open_settings_popup, save_settings, load_settings as load_settings_from_file
+from settings import open_settings_popup, load_settings
 from jaypy import centerwindow
 import urllib.parse
 import re
 import shutil
+import tempfile
+import atexit
 
 SETTINGS_FILE = os.path.join(
     os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else __file__),
     "settings.json"
 )
-
-def load_settings():
-    try:
-        return load_settings_from_file()
-    except Exception:
-        try:
-            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return {}
-
-def _save_settings_file(settings_dict):
-    try:
-        d = os.path.dirname(SETTINGS_FILE)
-        if d:
-            os.makedirs(d, exist_ok=True)
-        with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
-            json.dump(settings_dict, f, indent=2, ensure_ascii=False)
-        return True
-    except Exception:
-        return False
 
 def relaunch():
     os.execl(sys.executable, sys.executable, *sys.argv)
@@ -131,49 +112,6 @@ def _check_dnconsole_path(path):
         return True
     return False
 
-def validate_settings(settings):
-    gpg_needed = settings.get("GooglePlayGames_needed")
-    ld_needed = settings.get("LDPlayer9_needed")
-    gpg_path = _normalize_path(settings.get("GooglePlayGames_path", ""))
-    ld_path = _normalize_path(settings.get("LDPlayer9_path", ""))
-    gpg_valid = not gpg_needed or (gpg_path and os.path.exists(gpg_path))
-    ld_valid = not ld_needed or _check_dnconsole_path(ld_path)
-    return gpg_valid and ld_valid
-
-def create_shortcut(name, target, arguments="", icon=None):
-    desktop = winshell.desktop()
-    safe_name = _sanitize_name(name)
-    path = os.path.join(desktop, f"{safe_name}.lnk")
-    shell = Dispatch('WScript.Shell')
-    exe, extra_args = _split_exe_and_args(target)
-    final_args = " ".join([a for a in [extra_args.strip(), arguments.strip()] if a]).strip()
-    if not exe:
-        exe = _normalize_path(target)
-    shortcut = shell.CreateShortCut(path)
-    shortcut.Targetpath = exe
-    if final_args:
-        shortcut.Arguments = final_args
-    if icon and os.path.exists(icon) and os.path.getsize(icon) > 0:
-        try:
-            shortcut.IconLocation = icon
-        except Exception:
-            try:
-                shortcut.IconLocation = f"{icon},0"
-            except Exception:
-                pass
-    wd = ""
-    try:
-        if exe and os.path.exists(exe):
-            wd = os.path.dirname(exe)
-        else:
-            wd = os.path.dirname(target) or os.path.expanduser("~")
-    except Exception:
-        wd = os.path.expanduser("~")
-    if wd:
-        shortcut.WorkingDirectory = wd
-    shortcut.save()
-    return path
-
 def extract_package_id(text):
     if not text:
         return ""
@@ -216,19 +154,20 @@ def extract_package_id(text):
 def _get_app_dir():
     return os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else __file__)
 
-def _icons_dir():
-    d = os.path.join(_get_app_dir(), "gamelist_icons")
+def _icons_temp_dir():
+    d = os.path.join(tempfile.gettempdir(), "playstore_shortcut_icons")
     try:
         os.makedirs(d, exist_ok=True)
     except Exception:
         pass
     return d
 
-def _local_icon_candidates_for_name(name):
+def _local_icon_candidates_for_name(name, icons_folder=None):
     if not name:
         return []
     base = _sanitize_name(name)
-    icons_folder = _icons_dir()
+    if icons_folder is None:
+        icons_folder = _get_app_dir()
     candidates = []
     candidates.append(os.path.join(icons_folder, f"{base}.ico"))
     candidates.append(os.path.join(icons_folder, f"{base}.png"))
@@ -237,7 +176,7 @@ def _local_icon_candidates_for_name(name):
     return candidates
 
 def _find_local_icon(name):
-    for p in _local_icon_candidates_for_name(name):
+    for p in _local_icon_candidates_for_name(name, _get_app_dir()):
         try:
             if os.path.exists(p) and os.path.getsize(p) > 0:
                 return p
@@ -257,22 +196,56 @@ def _ensure_ico_from_image(src_path, dest_ico_path):
     except Exception:
         return None
 
+def create_shortcut(name, target, arguments="", icon=None, folder=None):
+    if not folder:
+        desktop = winshell.desktop()
+        path = os.path.join(desktop, f"{_sanitize_name(name)}.lnk")
+    else:
+        try:
+            os.makedirs(folder, exist_ok=True)
+        except Exception:
+            pass
+        path = os.path.join(folder, f"{_sanitize_name(name)}.lnk")
+    shell = Dispatch('WScript.Shell')
+    exe, extra_args = _split_exe_and_args(target)
+    final_args = " ".join([a for a in [extra_args.strip(), arguments.strip()] if a]).strip()
+    if not exe:
+        exe = _normalize_path(target)
+    shortcut = shell.CreateShortCut(path)
+    shortcut.Targetpath = exe
+    if final_args:
+        shortcut.Arguments = final_args
+    if icon and os.path.exists(icon) and os.path.getsize(icon) > 0:
+        try:
+            shortcut.IconLocation = icon
+        except Exception:
+            try:
+                shortcut.IconLocation = f"{icon},0"
+            except Exception:
+                pass
+    wd = ""
+    try:
+        if exe and os.path.exists(exe):
+            wd = os.path.dirname(exe)
+        else:
+            wd = os.path.dirname(target) or os.path.expanduser("~")
+    except Exception:
+        wd = os.path.expanduser("~")
+    if wd:
+        shortcut.WorkingDirectory = wd
+    shortcut.save()
+    return path
+
 class PlayStoreShortcutApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.settings = load_settings()
-        if not validate_settings(self.settings):
-            self.withdraw()
-            messagebox.showinfo("Settings Required", "Please configure paths to Google Play Games and LDPlayer 9.")
-            open_settings_popup(self)
-            relaunch()
-            return
         try:
             self.iconbitmap("icon.ico")
         except Exception:
             pass
         self.title("Create Shortcut on PC Emulator")
-        self.geometry("600x550")
+        self.geometry("600x560")
         self.configure(bg="#1e1e1e")
         self.resizable(False, False)
         centerwindow(self, offsety=-40)
@@ -285,9 +258,11 @@ class PlayStoreShortcutApp(tk.Tk):
         self.pkg_labels = {}
         self.normal_bg = "#2d2d2d"
         self.selected_bg = "#3a3a3a"
-        self.icons_folder = _icons_dir()
+        self.icons_temp_folder = _icons_temp_dir()
         self._setup_styles()
         self._create_widgets()
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+        atexit.register(self._cleanup_temp_icons)
 
     def _open_settings(self):
         win = open_settings_popup(self)
@@ -296,12 +271,6 @@ class PlayStoreShortcutApp(tk.Tk):
         def _reload_settings(event=None):
             try:
                 self.settings = load_settings()
-                idx = self.settings.get("LDPlayer9_index")
-                if idx is not None:
-                    try:
-                        self.ld_index_var.set(str(int(idx)))
-                    except Exception:
-                        pass
             except Exception:
                 pass
         win.bind("<Destroy>", _reload_settings)
@@ -353,7 +322,7 @@ class PlayStoreShortcutApp(tk.Tk):
         self.empty_label.place(relx=0.5, rely=0.5, anchor="center")
         self.loading_label = ttk.Label(self.canvas, text="🔄 Loading...", foreground="#aaaaaa")
         self.pkg_label_var = tk.StringVar(value="-")
-        self.full_link_var = tk.StringVar(value="") 
+        self.full_link_var = tk.StringVar(value="")
 
         pkg_frame = tk.Frame(self, bg="#1e1e1e")
         pkg_frame.pack(pady=6, padx=20, fill="x")
@@ -421,9 +390,9 @@ class PlayStoreShortcutApp(tk.Tk):
                          activebackground=self.selected_bg, activeforeground="white",
                          relief="flat", font=("Segoe UI", 10), cursor="hand2")
 
-    def _clear_icons_folder(self):
+    def _clear_temp_icons(self):
         try:
-            folder = self.icons_folder
+            folder = self.icons_temp_folder
             if not folder:
                 return
             if os.path.exists(folder):
@@ -436,8 +405,6 @@ class PlayStoreShortcutApp(tk.Tk):
                             shutil.rmtree(path)
                     except Exception:
                         pass
-            else:
-                os.makedirs(folder, exist_ok=True)
         except Exception:
             pass
 
@@ -446,7 +413,7 @@ class PlayStoreShortcutApp(tk.Tk):
         if not query:
             return
         self.clear_results()
-        self._clear_icons_folder()
+        self._clear_temp_icons()
         self.pkg_label_var.set("-")
         self.full_link_var.set("")
         self.empty_label.place_forget()
@@ -492,7 +459,6 @@ class PlayStoreShortcutApp(tk.Tk):
             err = e
         self.after(0, lambda: self._display_results(results, err))
 
-
     def _display_results(self, results, err=None):
         self.loading_label.place_forget()
         self.search_btn.config(state="normal")
@@ -528,13 +494,13 @@ class PlayStoreShortcutApp(tk.Tk):
             if local_icon:
                 try:
                     if local_icon.lower().endswith((".png", ".jpg", ".jpeg")):
-                        ico_target = os.path.join(self.icons_folder, f"{_sanitize_name(name)}.ico")
+                        ico_target = os.path.join(self.icons_temp_folder, f"{_sanitize_name(name)}.ico")
                         _ensure_ico_from_image(local_icon, ico_target)
                     pil_img = None
                     try:
                         pil_img = Image.open(local_icon).convert("RGBA")
                     except Exception:
-                        ico_fallback = os.path.join(self.icons_folder, f"{_sanitize_name(name)}.ico")
+                        ico_fallback = os.path.join(self.icons_temp_folder, f"{_sanitize_name(name)}.ico")
                         if os.path.exists(ico_fallback):
                             pil_img = Image.open(ico_fallback).convert("RGBA")
                     if pil_img:
@@ -546,7 +512,7 @@ class PlayStoreShortcutApp(tk.Tk):
                         if ico_path and ico_path.lower().endswith(".ico"):
                             self.downloaded_icon_files[idx] = ico_path
                         else:
-                            created_ico = os.path.join(self.icons_folder, f"{_sanitize_name(name)}.ico")
+                            created_ico = os.path.join(self.icons_temp_folder, f"{_sanitize_name(name)}.ico")
                             if os.path.exists(created_ico):
                                 self.downloaded_icon_files[idx] = created_ico
                 except Exception:
@@ -565,8 +531,8 @@ class PlayStoreShortcutApp(tk.Tk):
         try:
             if pil_img and name:
                 base = _sanitize_name(name)
-                png_path = os.path.join(self.icons_folder, f"{base}.png")
-                ico_path = os.path.join(self.icons_folder, f"{base}.ico")
+                png_path = os.path.join(self.icons_temp_folder, f"{base}.png")
+                ico_path = os.path.join(self.icons_temp_folder, f"{base}.ico")
                 try:
                     pil_img.save(png_path, format="PNG")
                 except Exception:
@@ -576,7 +542,7 @@ class PlayStoreShortcutApp(tk.Tk):
                     self.downloaded_icon_files[idx] = ico_path
                 except Exception:
                     try:
-                        tmp = os.path.join(os.getenv("TEMP") or ".", f"{base}.ico")
+                        tmp = os.path.join(self.icons_temp_folder, f"{base}.ico")
                         pil_img.resize((64, 64), Image.Resampling.LANCZOS).save(tmp, format="ICO", sizes=[(64, 64)])
                         self.downloaded_icon_files[idx] = tmp
                     except Exception:
@@ -601,7 +567,7 @@ class PlayStoreShortcutApp(tk.Tk):
                 if idx < len(self.search_results):
                     name, pkg, icon_url, full_link = self.search_results[idx]
                     base = _sanitize_name(name)
-                    ico_path = os.path.join(self.icons_folder, f"{base}.ico")
+                    ico_path = os.path.join(self.icons_temp_folder, f"{base}.ico")
                     if not os.path.exists(ico_path):
                         try:
                             pil_img.resize((64, 64), Image.Resampling.LANCZOS).save(ico_path, format="ICO", sizes=[(64, 64)])
@@ -703,7 +669,10 @@ class PlayStoreShortcutApp(tk.Tk):
         raw = self.pkg_entry.get().strip()
         pkgid = extract_package_id(raw)
         if not pkgid:
-            messagebox.showerror("Invalid", "Unable to extract package name. Please paste a valid Play Store link or package id.")
+            try:
+                messagebox.showerror("Invalid", "Unable to extract package name. Please paste a valid Play Store link or package id.")
+            except Exception:
+                pass
             return
         if self.selected_index is not None and 0 <= self.selected_index < len(self.search_results):
             name, _, icon_url, _ = self.search_results[self.selected_index]
@@ -746,21 +715,42 @@ class PlayStoreShortcutApp(tk.Tk):
         except Exception:
             idx_int = 0
         try:
-            s = load_settings()
-            s["LDPlayer9_index"] = idx_int
-            _save_settings_file(s)
+            try:
+                with open(SETTINGS_FILE, "r", encoding="utf-8-sig") as f:
+                    existing = json.load(f)
+            except Exception:
+                existing = {}
+            existing["LDPlayer9_index"] = idx_int
+            try:
+                with open(SETTINGS_FILE, "w", encoding="utf-8-sig") as f:
+                    json.dump(existing, f, indent=2)
+            except Exception:
+                pass
         except Exception:
             pass
 
     def create(self):
         pkg = self.pkg_label_var.get()
         if not pkg or pkg == "-":
-            messagebox.showerror("Select", "Please select a package first.")
+            try:
+                messagebox.showerror("Select", "Please select a package first.")
+            except Exception:
+                pass
             return
         name = next((n for n, p, _i, _l in self.search_results if p == pkg), None)
         if not name:
-            messagebox.showerror("Error", "App name not found.")
+            try:
+                messagebox.showerror("Error", "App name not found.")
+            except Exception:
+                pass
             return
+        settings_now = load_settings()
+        shortcuts_folder = settings_now.get("shortcuts_folder") or os.path.join(os.path.expanduser("~"), "Desktop")
+        game_folder = os.path.join(_normalize_path(shortcuts_folder), _sanitize_name(name))
+        try:
+            os.makedirs(game_folder, exist_ok=True)
+        except Exception:
+            pass
         platform = self.platform_var.get()
         if platform == "Google Play Games Beta":
             target = "C:\\Windows\\System32\\cmd.exe"
@@ -770,7 +760,10 @@ class PlayStoreShortcutApp(tk.Tk):
             target_candidate = settings_now.get("LDPlayer9_path", "")
             target_candidate = _normalize_path(target_candidate)
             if not _check_dnconsole_path(target_candidate):
-                answer = messagebox.askyesno("LDPlayer path invalid", f"LDPlayer path seems invalid or inaccessible:\n{target_candidate}\n\nOpen Settings? (Yes)  Browse for dnconsole.exe now? (No)")
+                try:
+                    answer = messagebox.askyesno("LDPlayer path invalid", f"LDPlayer path seems invalid or inaccessible:\n{target_candidate}\n\nOpen Settings? (Yes)  Browse for dnconsole.exe now? (No)")
+                except Exception:
+                    answer = False
                 if answer:
                     self._open_settings()
                     return
@@ -778,11 +771,15 @@ class PlayStoreShortcutApp(tk.Tk):
                     file_path = filedialog.askopenfilename(title="Locate dnconsole.exe", filetypes=[("dnconsole.exe","dnconsole.exe"), ("All files","*.*")])
                     if file_path:
                         file_path = _normalize_path(file_path)
-                        s = load_settings()
-                        s["LDPlayer9_path"] = file_path
-                        _save_settings_file(s)
                         try:
-                            self.settings = load_settings()
+                            with open(SETTINGS_FILE, "r", encoding="utf-8-sig") as f:
+                                existing = json.load(f)
+                        except Exception:
+                            existing = {}
+                        existing["LDPlayer9_path"] = file_path
+                        try:
+                            with open(SETTINGS_FILE, "w", encoding="utf-8-sig") as f:
+                                json.dump(existing, f, indent=2)
                         except Exception:
                             pass
                         target_candidate = file_path
@@ -795,21 +792,29 @@ class PlayStoreShortcutApp(tk.Tk):
             except Exception:
                 idx_int = 0
             try:
-                s = load_settings()
-                s["LDPlayer9_index"] = idx_int
-                _save_settings_file(s)
+                with open(SETTINGS_FILE, "r", encoding="utf-8-sig") as f:
+                    existing = json.load(f)
+            except Exception:
+                existing = {}
+            existing["LDPlayer9_index"] = idx_int
+            try:
+                with open(SETTINGS_FILE, "w", encoding="utf-8-sig") as f:
+                    json.dump(existing, f, indent=2)
             except Exception:
                 pass
             arguments = f'launchex --index {idx_int} --packagename {pkg}'
             if not _check_dnconsole_path(target):
-                messagebox.showerror("LDPlayer", f"LDPlayer path still invalid after your action.\nChecked: {target}")
+                try:
+                    messagebox.showerror("LDPlayer", f"LDPlayer path still invalid after your action.\nChecked: {target}")
+                except Exception:
+                    pass
                 return
         icon_path = None
         if name:
             local_icon = _find_local_icon(name)
             if local_icon:
                 if local_icon.lower().endswith((".png", ".jpg", ".jpeg")):
-                    ico_created = os.path.join(self.icons_folder, f"{_sanitize_name(name)}.ico")
+                    ico_created = os.path.join(self.icons_temp_folder, f"{_sanitize_name(name)}.ico")
                     _ensure_ico_from_image(local_icon, ico_created)
                     if os.path.exists(ico_created):
                         icon_path = ico_created
@@ -819,11 +824,60 @@ class PlayStoreShortcutApp(tk.Tk):
             icon_path = self.downloaded_icon_files.get(self.selected_index)
         if icon_path and (not os.path.exists(icon_path) or os.path.getsize(icon_path) == 0):
             icon_path = None
+        final_icon_path = None
+        if icon_path:
+            try:
+                dest_icon = os.path.join(game_folder, f"{_sanitize_name(name)}.ico")
+                try:
+                    shutil.copyfile(icon_path, dest_icon)
+                except Exception:
+                    try:
+                        pil = Image.open(icon_path)
+                        pil.convert("RGBA").resize((64, 64), Image.Resampling.LANCZOS).save(dest_icon, format="ICO", sizes=[(64,64)])
+                    except Exception:
+                        dest_icon = None
+                if dest_icon and os.path.exists(dest_icon):
+                    final_icon_path = dest_icon
+            except Exception:
+                final_icon_path = None
         try:
-            create_shortcut(name, target, arguments, icon_path)
-            messagebox.showinfo("Success", f"Shortcut created for: {name}")
+            create_shortcut(name, target, arguments, final_icon_path, folder=game_folder)
+            try:
+                desktop = winshell.desktop()
+                create_shortcut(name, target, arguments, final_icon_path, folder=None)
+            except Exception:
+                pass
+            try:
+                messagebox.showinfo("Success", f"Shortcut created for: {name}\nSaved to: {game_folder}")
+            except Exception:
+                pass
         except Exception as e:
-            messagebox.showerror("Error", f"Shortcut creation failed:\n{e}")
+            try:
+                messagebox.showerror("Error", f"Shortcut creation failed:\n{e}")
+            except Exception:
+                pass
+
+    def _cleanup_temp_icons(self):
+        try:
+            folder = self.icons_temp_folder
+            if folder and os.path.exists(folder):
+                shutil.rmtree(folder, ignore_errors=True)
+        except Exception:
+            pass
+
+    def _on_close(self):
+        try:
+            self._cleanup_temp_icons()
+        except Exception:
+            pass
+        try:
+            self.destroy()
+        except Exception:
+            pass
+        try:
+            sys.exit(0)
+        except Exception:
+            pass
 
 if __name__ == "__main__":
     PlayStoreShortcutApp().mainloop()
