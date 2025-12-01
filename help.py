@@ -103,6 +103,10 @@ def open_help_popup(parent=None):
         "• Added mouse scroll up and down vertical function on help window\n"
         "• Found abnormality of producing game icons, so need to delete all of them from the \"gamelist_icons\" folder then reproduce the icon again when searching. Use temporary storage instead of \"gamelist_icons\" in the future updates\n"
         "\n"
+        "Date: November 30, 2025\n"
+        "• If the package name is NA, it will get the full link and get the package name there\n"
+        "• Added Play Store Link text label, when it click, it will pop up on the website\n"
+        "\n"
         "Created by Jayrald John C. Dalman."
     )
 

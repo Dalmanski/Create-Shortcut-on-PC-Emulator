@@ -1,0 +1,1 @@
+Find a way to fix gone icon due to auto delete game icon on that folder. Maybe my logic is, before it create a shortcut, create a folder on it with the icon.

@@ -353,23 +353,42 @@ class PlayStoreShortcutApp(tk.Tk):
         self.empty_label.place(relx=0.5, rely=0.5, anchor="center")
         self.loading_label = ttk.Label(self.canvas, text="🔄 Loading...", foreground="#aaaaaa")
         self.pkg_label_var = tk.StringVar(value="-")
+        self.full_link_var = tk.StringVar(value="") 
+
         pkg_frame = tk.Frame(self, bg="#1e1e1e")
-        pkg_frame.pack(pady=10, padx=20, fill="x")
+        pkg_frame.pack(pady=6, padx=20, fill="x")
+
+        full_link_label_title = ttk.Label(pkg_frame, text="🔗 Play Store Link:", background="#1e1e1e")
+        full_link_label_title.grid(row=0, column=0, sticky="w")
+        full_link_label = ttk.Label(pkg_frame, textvariable=self.full_link_var, foreground="#00bfff", cursor="hand2", background="#1e1e1e", wraplength=460)
+        full_link_label.grid(row=0, column=1, columnspan=3, sticky="w", padx=(8, 8))
+        def _open_full_link(event=None):
+            link = self.full_link_var.get().strip()
+            if link:
+                try:
+                    import webbrowser
+                    webbrowser.open(link)
+                except Exception:
+                    pass
+        full_link_label.bind("<Button-1>", _open_full_link)
+
         lbl_static = ttk.Label(pkg_frame, text="📦 Selected Package:")
-        lbl_static.grid(row=0, column=0, sticky="w")
+        lbl_static.grid(row=1, column=0, sticky="w")
         pkg_label = ttk.Label(pkg_frame, textvariable=self.pkg_label_var, foreground="#cccccc", cursor="hand2", background="#1e1e1e")
-        pkg_label.grid(row=0, column=1, sticky="w", padx=(8, 8))
+        pkg_label.grid(row=1, column=1, sticky="w", padx=(8, 8))
         pkg_label.bind("<Button-1>", self.copy_selected_pkg_to_clipboard)
         self.pkg_entry = ttk.Entry(pkg_frame)
-        self.pkg_entry.grid(row=0, column=2, sticky="ew", padx=(4, 4))
+        self.pkg_entry.grid(row=1, column=2, sticky="ew", padx=(4, 4))
         self.pkg_entry.grid_remove()
         self.pkg_use_btn = ttk.Button(pkg_frame, text="Use", command=self._use_manual_pkg)
-        self.pkg_use_btn.grid(row=0, column=3, sticky="e")
+        self.pkg_use_btn.grid(row=1, column=3, sticky="e")
         self.pkg_use_btn.grid_remove()
-        pkg_frame.grid_columnconfigure(2, weight=1)
-        self.pkg_tip = tk.Label(pkg_frame, text="We can't find their package name, pls copy the link URL and paste here", fg="#ffdd88", bg="#1e1e1e", font=("Segoe UI", 8), wraplength=420, justify="left")
-        self.pkg_tip.grid(row=1, column=1, columnspan=3, sticky="w", pady=(6, 0))
+        pkg_frame.grid_columnconfigure(1, weight=1)
+
+        self.pkg_tip = tk.Label(pkg_frame, text="We can't find their package name, pls copy the link URL and paste here", fg="#ffdd88", bg="#1e1e1e", font=("Segoe UI", 8), wraplength=460, justify="left")
+        self.pkg_tip.grid(row=2, column=0, columnspan=4, sticky="w", pady=(6, 0))
         self.pkg_tip.grid_remove()
+
         plat_frame = tk.Frame(self, bg="#1e1e1e")
         plat_frame.pack(pady=5, padx=20, fill="x")
         plat_frame.grid_columnconfigure(1, weight=1)
@@ -429,6 +448,7 @@ class PlayStoreShortcutApp(tk.Tk):
         self.clear_results()
         self._clear_icons_folder()
         self.pkg_label_var.set("-")
+        self.full_link_var.set("")
         self.empty_label.place_forget()
         self.loading_label.place(relx=0.5, rely=0.5, anchor="center")
         self.update_idletasks()
@@ -446,11 +466,25 @@ class PlayStoreShortcutApp(tk.Tk):
                     info = app(pkg_candidate, lang=self.settings.get("lang", "en"), country=self.settings.get("country", "PH"))
                     title = info.get("title") or info.get("name") or info.get("appId") or pkg_candidate
                     icon = info.get("icon") or info.get("iconUrl") or ""
-                    results = [{"title": title, "appId": pkg_candidate, "icon": icon}]
+                    full_link = f"https://play.google.com/store/apps/details?id={pkg_candidate}"
+                    results = [{"title": title, "appId": pkg_candidate, "icon": icon, "link": full_link}]
                 except Exception:
-                    results = search(query, lang=self.settings.get("lang", "en"), country=self.settings.get("country", "PH"))[:10]
+                    results = []
+                    sr = search(query, lang=self.settings.get("lang", "en"), country=self.settings.get("country", "PH"))[:10]
+                    for r in sr:
+                        title = r.get("title") or r.get("name") or ""
+                        appid = r.get("appId") or ""
+                        icon = r.get("icon") or r.get("iconUrl") or ""
+                        link = f"https://play.google.com/store/apps/details?id={appid}" if appid else f"https://play.google.com/store/search?q={urllib.parse.quote(title)}&c=apps"
+                        results.append({"title": title, "appId": appid, "icon": icon, "link": link})
             else:
-                results = search(query, lang=self.settings.get("lang", "en"), country=self.settings.get("country", "PH"))[:10]
+                sr = search(query, lang=self.settings.get("lang", "en"), country=self.settings.get("country", "PH"))[:10]
+                for r in sr:
+                    title = r.get("title") or r.get("name") or ""
+                    appid = r.get("appId") or ""
+                    icon = r.get("icon") or r.get("iconUrl") or ""
+                    link = f"https://play.google.com/store/apps/details?id={appid}" if appid else f"https://play.google.com/store/search?q={urllib.parse.quote(title)}&c=apps"
+                    results.append({"title": title, "appId": appid, "icon": icon, "link": link})
         except Exception as e:
             results = []
             err = e
@@ -468,17 +502,18 @@ class PlayStoreShortcutApp(tk.Tk):
         self.scrollable_frame.grid_columnconfigure(0, weight=1)
         self.scrollable_frame.grid_columnconfigure(1, weight=1)
         for idx, appinfo in enumerate(results):
-            name = appinfo.get('title') or appinfo.get('name') or "Unknown"
-            pkg = appinfo.get('appId') or appinfo.get('appId')
-            icon_url = appinfo.get('icon', "") or appinfo.get('iconUrl', "")
+            name = appinfo.get('title') or "Unknown"
+            pkg = appinfo.get('appId') or ""
+            icon_url = appinfo.get('icon', "") or ""
+            full_link = appinfo.get('link') or (f"https://play.google.com/store/apps/details?id={pkg}" if pkg else f"https://play.google.com/store/search?q={urllib.parse.quote(name)}&c=apps")
             item = tk.Frame(self.scrollable_frame, bg=self.normal_bg, padx=6, pady=4)
             item.grid(row=idx // 2, column=idx % 2, padx=6, pady=6, sticky="nsew")
             item.bind("<Button-1>", lambda e, p=pkg, f=item, i=idx: self.select_package(p, f, i))
             icon_lbl = tk.Label(item, text="🕹️", fg="white", bg=self.normal_bg, font=("Segoe UI", 18))
             icon_lbl.pack(side="left")
             self.icon_labels[idx] = icon_lbl
-            self._create_name_label(item, name, pkg, item, idx)
-            self.search_results.append((name, pkg or "", icon_url))
+            self._create_name_label(item, name, pkg, full_link, item, idx)
+            self.search_results.append((name, pkg or "", icon_url, full_link))
             local_icon = _find_local_icon(name)
             if local_icon:
                 try:
@@ -554,7 +589,7 @@ class PlayStoreShortcutApp(tk.Tk):
                     lbl.image = photo
             try:
                 if idx < len(self.search_results):
-                    name, pkg, icon_url = self.search_results[idx]
+                    name, pkg, icon_url, full_link = self.search_results[idx]
                     base = _sanitize_name(name)
                     ico_path = os.path.join(self.icons_folder, f"{base}.ico")
                     if not os.path.exists(ico_path):
@@ -568,7 +603,7 @@ class PlayStoreShortcutApp(tk.Tk):
         except Exception:
             pass
 
-    def _create_name_label(self, parent, text, pkg, frame, idx):
+    def _create_name_label(self, parent, text, pkg, full_link, frame, idx):
         title_lbl = tk.Label(parent, text=text, fg="#ffffff", bg=self.normal_bg,
                              font=("Segoe UI", 10), wraplength=160, justify="left", anchor="w")
         title_lbl.pack(anchor="w", fill="x")
@@ -590,21 +625,47 @@ class PlayStoreShortcutApp(tk.Tk):
         self.downloaded_icon_files.clear()
         self.selected_item = None
         self.selected_index = None
+        self.full_link_var.set("")
         self._hide_pkg_entry()
 
     def select_package(self, pkg, item_frame=None, index=None):
         if pkg is None:
             pkg = ""
-        self.pkg_label_var.set(pkg if pkg else "-")
         if self.selected_item and self.selected_item.winfo_exists():
             self._set_bg_recursive(self.selected_item, "#2d2d2d")
         if item_frame:
             self._set_bg_recursive(item_frame, "#3a3a3a")
             self.selected_item = item_frame
         self.selected_index = index
+
+        name = ""
+        full_link = ""
+        if index is not None and 0 <= index < len(self.search_results):
+            name, pkg_at_index, icon_url, full_link = self.search_results[index]
+            if not pkg_at_index:
+                try:
+                    sr = search(name, lang=self.settings.get("lang", "en"), country=self.settings.get("country", "PH"))[:8]
+                    found = None
+                    for r in sr:
+                        aid = r.get("appId") or ""
+                        if aid:
+                            found = aid
+                            break
+                    if found:
+                        pkg_at_index = found
+                        full_link = f"https://play.google.com/store/apps/details?id={found}"
+                        self.search_results[index] = (name, pkg_at_index, icon_url, full_link)
+                        pkg = pkg_at_index
+                except Exception:
+                    pass
+
+        self.pkg_label_var.set(pkg if pkg else "-")
+        self.full_link_var.set(full_link or "")
         if not pkg or pkg == "None":
             self._show_pkg_entry()
             self.pkg_entry.delete(0, tk.END)
+            suggested = full_link or (f"https://play.google.com/store/search?q={urllib.parse.quote(name)}&c=apps" if name else "")
+            self.pkg_entry.insert(0, suggested)
             self.pkg_entry.focus_set()
         else:
             self._hide_pkg_entry()
@@ -635,14 +696,16 @@ class PlayStoreShortcutApp(tk.Tk):
             messagebox.showerror("Invalid", "Unable to extract package name. Please paste a valid Play Store link or package id.")
             return
         if self.selected_index is not None and 0 <= self.selected_index < len(self.search_results):
-            name, _, icon_url = self.search_results[self.selected_index]
-            self.search_results[self.selected_index] = (name, pkgid, icon_url)
+            name, _, icon_url, _ = self.search_results[self.selected_index]
+            full_link = f"https://play.google.com/store/apps/details?id={pkgid}"
+            self.search_results[self.selected_index] = (name, pkgid, icon_url, full_link)
             lbl = self.pkg_labels.get(self.selected_index)
             if lbl:
                 lbl.config(text=pkgid)
-        self.pkg_label_var.set(pkgid)
-        self.select_package(pkgid, self.selected_item, self.selected_index)
-        self._hide_pkg_entry()
+            self.pkg_label_var.set(pkgid)
+            self.full_link_var.set(full_link)
+            self.select_package(pkgid, self.selected_item, self.selected_index)
+            self._hide_pkg_entry()
 
     def copy_selected_pkg_to_clipboard(self, event=None):
         pkg = self.pkg_label_var.get()
@@ -684,7 +747,7 @@ class PlayStoreShortcutApp(tk.Tk):
         if not pkg or pkg == "-":
             messagebox.showerror("Select", "Please select a package first.")
             return
-        name = next((n for n, p, _ in self.search_results if p == pkg), None)
+        name = next((n for n, p, _i, _l in self.search_results if p == pkg), None)
         if not name:
             messagebox.showerror("Error", "App name not found.")
             return
